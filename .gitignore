@@ -1,0 +1,22 @@
+node_modules/
+.next/
+
+# Secret environment files
+.env
+.env.*
+!.env.example
+*.env
+
+# Local databases and credentials
+data/*.sqlite
+data/*.db
+credentials.json
+*credentials*
+*token*
+*.pem
+*.key
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
