@@ -5,11 +5,47 @@ The server is in UTC but interprets startTime as Argentina local time (UTC-3).
 """
 
 import requests
+import os
+import sys
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 import json
 
-BASE_URL = "http://localhost:3000/api"
+# Windows console (cp1252) cannot print emojis; force UTF-8 output
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
+def _tz(name, offset_hours):
+    """ZoneInfo needs the 'tzdata' package on Windows; fall back to a fixed offset."""
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(name)
+    except Exception:
+        from datetime import timezone
+        return timezone(timedelta(hours=offset_hours))
+
+ARG_TZ = _tz("America/Argentina/Buenos_Aires", -3)
+UTC_TZ = _tz("UTC", 0)
+
+BASE_URL = os.environ.get("TEST_BASE_URL", "http://localhost:3000/api")
+SEED_SECRET = os.environ.get("TEST_SEED_SECRET", "")  # optional: allows POST /seed?force=1
+
+RECEPTION_CREDENTIALS = {"email": "recepcion@clinicabuenasalud.com", "password": "Recepcion@2025!"}
+
+def login(credentials, retries=1):
+    """Login helper -> bearer headers dict (empty if it fails). Retries once if rate limited."""
+    for attempt in range(retries + 1):
+        r = requests.post(f"{BASE_URL}/auth/login", json=credentials, timeout=10)
+        if r.status_code == 200 and r.json().get('token'):
+            return {"Authorization": f"Bearer {r.json()['token']}"}
+        if r.status_code == 429 and attempt < retries:
+            print("  (rate limited, waiting 61s before retrying login...)")
+            import time; time.sleep(61)
+            continue
+        print(f"⚠️  Login failed for {credentials['email']}: {r.status_code} {r.text[:120]}")
+        return {}
+    return {}
 
 def print_section(title):
     print(f"\n{'='*80}")
@@ -21,17 +57,30 @@ def test_2h_anticipation_rule():
     
     print_section("STEP 1: Clean seed")
     try:
-        resp = requests.post(f"{BASE_URL}/seed?force=1", timeout=30)
+        # force=1 (wipe + reseed) requires admin session or X-Seed-Secret header
+        headers = {"X-Seed-Secret": SEED_SECRET} if SEED_SECRET else {}
+        url = f"{BASE_URL}/seed?force=1" if SEED_SECRET else f"{BASE_URL}/seed"
+        resp = requests.post(url, headers=headers, timeout=30)
         print(f"Seed response: {resp.status_code}")
         if resp.status_code == 200:
             data = resp.json()
             print(f"✅ Seed successful: {json.dumps(data, indent=2)}")
+        elif resp.status_code == 403:
+            print("❌ Seed failed: 403 (set TEST_SEED_SECRET env to force a reseed)")
+            return
         else:
             print(f"❌ Seed failed: {resp.text}")
             return
     except Exception as e:
         print(f"❌ Seed error: {e}")
         return
+
+    print_section("STEP 1B: Login as reception (required for booking)")
+    headers = login(RECEPTION_CREDENTIALS)
+    if not headers:
+        print("❌ Could not authenticate - appointment endpoints require a session")
+        return
+    print("✅ Authenticated as reception")
 
     print_section("STEP 2: Get doctor data")
     try:
@@ -64,15 +113,35 @@ def test_2h_anticipation_rule():
         return
 
     # Argentina timezone
-    arg_tz = ZoneInfo("America/Argentina/Buenos_Aires")
+    arg_tz = ARG_TZ
     now_arg = datetime.now(arg_tz)
     
     print_section("STEP 3: Test Cases")
     print(f"Current Argentina time: {now_arg.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-    print(f"Current UTC time: {datetime.now(ZoneInfo('UTC')).strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    print(f"Current UTC time: {datetime.now(UTC_TZ).strftime('%Y-%m-%d %H:%M:%S %Z')}")
     
     # Test results table
     results = []
+    
+    # ========== CASE 0: No session (must be REJECTED with 401) ==========
+    print("\n" + "-"*80)
+    print("CASE 0: Booking without session (must REJECT with 401)")
+    print("-"*80)
+    try:
+        resp = requests.post(f"{BASE_URL}/appointments", json={
+            "doctorId": doctor_id, "branchId": branch_id,
+            "date": (now_arg + timedelta(days=3)).strftime("%Y-%m-%d"),
+            "startTime": "10:00", "endTime": "10:30",
+        }, timeout=10)
+        if resp.status_code == 401:
+            print("✅ CASE 0 PASSED: Unauthenticated booking rejected with 401")
+            results.append(("Case 0 (no session)", "✅ PASS", "401"))
+        else:
+            print(f"❌ CASE 0 FAILED: Expected 401, got {resp.status_code}")
+            results.append(("Case 0 (no session)", "❌ FAIL", f"Got {resp.status_code}"))
+    except Exception as e:
+        print(f"❌ CASE 0 ERROR: {e}")
+        results.append(("Case 0 (no session)", "❌ ERROR", str(e)))
     
     # ========== CASE A: 1 hour ahead (should REJECT with 400) ==========
     print("\n" + "-"*80)
@@ -99,7 +168,7 @@ def test_2h_anticipation_rule():
     print(f"Argentina time: {t1.strftime('%Y-%m-%d %H:%M')} (1h from now)")
     
     try:
-        resp = requests.post(f"{BASE_URL}/appointments", json=payload_a, timeout=10)
+        resp = requests.post(f"{BASE_URL}/appointments", json=payload_a, headers=headers, timeout=10)
         print(f"Response status: {resp.status_code}")
         print(f"Response body: {resp.text}")
         
@@ -145,7 +214,7 @@ def test_2h_anticipation_rule():
     
     appointment_id_b = None
     try:
-        resp = requests.post(f"{BASE_URL}/appointments", json=payload_b, timeout=10)
+        resp = requests.post(f"{BASE_URL}/appointments", json=payload_b, headers=headers, timeout=10)
         print(f"Response status: {resp.status_code}")
         print(f"Response body: {resp.text[:500]}")
         
@@ -188,7 +257,7 @@ def test_2h_anticipation_rule():
     print(f"Argentina time: {t_past.strftime('%Y-%m-%d %H:%M')} (yesterday)")
     
     try:
-        resp = requests.post(f"{BASE_URL}/appointments", json=payload_c, timeout=10)
+        resp = requests.post(f"{BASE_URL}/appointments", json=payload_c, headers=headers, timeout=10)
         print(f"Response status: {resp.status_code}")
         print(f"Response body: {resp.text}")
         
@@ -232,7 +301,7 @@ def test_2h_anticipation_rule():
     appointment_id_d = None
     try:
         # Create appointment
-        resp = requests.post(f"{BASE_URL}/appointments", json=payload_d, timeout=10)
+        resp = requests.post(f"{BASE_URL}/appointments", json=payload_d, headers=headers, timeout=10)
         print(f"Create response status: {resp.status_code}")
         
         if resp.status_code == 200:
@@ -242,7 +311,7 @@ def test_2h_anticipation_rule():
             
             # Cancel it
             cancel_payload = {"status": "cancelled", "cancelReason": "Test late cancellation"}
-            resp_cancel = requests.patch(f"{BASE_URL}/appointments/{appointment_id_d}", json=cancel_payload, timeout=10)
+            resp_cancel = requests.patch(f"{BASE_URL}/appointments/{appointment_id_d}", json=cancel_payload, headers=headers, timeout=10)
             print(f"Cancel response status: {resp_cancel.status_code}")
             
             if resp_cancel.status_code == 200:

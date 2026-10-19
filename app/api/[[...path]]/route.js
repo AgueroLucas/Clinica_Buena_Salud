@@ -17,6 +17,23 @@ const badZod = (e) => err(e.errors?.[0]?.message || 'Datos inválidos', 400, { i
 
 const SENSITIVE_ROLES_2FA = ['admin', 'doctor']
 const APPT_MIN_HOURS_AHEAD = 2
+const SEED_SECRET = process.env.SEED_SECRET || ''
+const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET_KEY || ''
+
+/* ---------- Cloudflare Turnstile (CAPTCHA) ---------- */
+async function verifyCaptcha(token) {
+  if (!TURNSTILE_SECRET) return true // CAPTCHA no configurado (entorno dev) → no bloquea
+  if (!token) return false
+  try {
+    const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ secret: TURNSTILE_SECRET, response: String(token) }),
+    })
+    const data = await res.json()
+    return !!data.success
+  } catch { return false }
+}
 
 /** Interpret user-submitted (date, startTime) as Argentina local time.
  *  Return absolute UTC ms of that moment. Argentina is UTC-3 (no DST). */
@@ -75,6 +92,18 @@ function requireRole(user, roles) {
   return null
 }
 
+/** Admin check for destructive endpoints: valid admin session OR SEED_SECRET header */
+async function isAdminRequest(req) {
+  const secretHeader = req.headers.get('x-seed-secret')
+  if (SEED_SECRET && secretHeader === SEED_SECRET) return true
+  const token = (req.headers.get('authorization') || '').replace('Bearer ', '').trim()
+  const payload = verifyToken(token)
+  if (!payload?.uid) return false
+  const db = await getDb()
+  const u = await db.collection('users').findOne({ id: payload.uid })
+  return !!u && u.role === 'admin' && !(u.lockedUntil && new Date(u.lockedUntil) > new Date())
+}
+
 function timeToMinutes(t) { const [h,m] = t.split(':').map(Number); return h*60+m }
 function minutesToTime(m) { const h=Math.floor(m/60), mm=m%60; return `${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}` }
 
@@ -86,6 +115,13 @@ const LoginSchema = z.object({
   email: z.string().email('Email inválido'),
   password: z.string().min(1, 'Contraseña requerida'),
   totp: z.string().optional(),
+})
+const RegisterSchema = z.object({
+  name: z.string().min(3, 'Nombre requerido'),
+  email: z.string().email('Email inválido'),
+  password: z.string().min(1, 'Contraseña requerida'),
+  phone: z.string().optional(),
+  captchaToken: z.string().optional(),
 })
 const AppointmentSchema = z.object({
   patientId: z.string().nullable().optional(),
@@ -100,6 +136,7 @@ const AppointmentSchema = z.object({
   startTime: timeStr,
   endTime: timeStr,
   notes: z.string().optional(),
+  captchaToken: z.string().optional(),
 })
 const UpdateAppointmentSchema = z.object({
   status: z.enum(['pending','confirmed','in_room','attended','cancelled','no_show']).optional(),
@@ -122,6 +159,14 @@ async function handleSeed(req) {
   const specCount = await db.collection('specialties').countDocuments()
 
   if (specCount > 0 && !force && !legacy) return ok({ ok: true, alreadySeeded: true })
+
+  // Proteger el wipe: solo administrador o SEED_SECRET pueden regenerar datos existentes.
+  // Si la BD está completamente vacía, el seed inicial es público (bootstrap).
+  if (anyUser || specCount > 0) {
+    if (!(await isAdminRequest(req))) {
+      return err('Seed restringido: requiere sesión de administrador o header X-Seed-Secret', 403)
+    }
+  }
 
   // wipe
   for (const c of ['users','specialties','branches','offices','doctors','schedules','appointments','audit_logs']) {
@@ -321,6 +366,32 @@ async function handleLogin(req) {
   return ok({ token, user: decryptFields(safe, SENSITIVE_USER) })
 }
 
+async function handleRegister(req) {
+  const ip = clientIp(req)
+  const rl = rateLimit(`register:${ip}`, 5, 60_000)
+  if (!rl.allowed) return err('Demasiados registros. Espere un minuto.', 429)
+  let body
+  try { body = RegisterSchema.parse(await req.json()) } catch (e) { return badZod(e) }
+  if (!(await verifyCaptcha(body.captchaToken))) return err('Verificación CAPTCHA inválida', 403)
+  if (!passwordStrong(body.password)) {
+    return err('La contraseña debe tener al menos 10 caracteres, una mayúscula, un número y un símbolo', 400)
+  }
+  const db = await getDb()
+  const email = body.email.toLowerCase().trim()
+  const exists = await db.collection('users').findOne({ email })
+  if (exists) return err('Ya existe una cuenta con ese email', 409)
+  const user = {
+    id: uuidv4(), email, password: await hashPassword(body.password),
+    name: body.name.trim(), role: 'patient', phone: encrypt(body.phone || ''),
+    twoFactorEnabled: false, failedLoginCount: 0, createdAt: new Date(),
+  }
+  await db.collection('users').insertOne(user)
+  await audit(db, req, { userId: user.id, action: 'REGISTER', entity: 'auth', newValues: { email } })
+  const token = signToken({ uid: user.id, role: user.role, mfa: false })
+  const { password: _p, ...safe } = user
+  return ok({ token, user: safe }, 201)
+}
+
 async function handle2FASetup(req) {
   // Uses setup token from login OR authenticated user
   const auth = req.headers.get('authorization')?.replace('Bearer ', '').trim()
@@ -407,12 +478,21 @@ async function handleAvailability(req, { doctorId }) {
 
 /* ================= APPOINTMENTS ================= */
 async function handleCreateAppointment(req) {
-  const user = await currentUser(req) // may be null (public booking allowed)
+  const user = await currentUser(req)
+  if (!user) return err('Debe iniciar sesión o crear una cuenta para solicitar un turno', 401)
   const ip = clientIp(req)
-  const rl = rateLimit(`appt:${user?.id || ip}`, 10, 60_000)
+  const rl = rateLimit(`appt:${user.id || ip}`, 10, 60_000)
   if (!rl.allowed) return err('Demasiadas reservas. Espere un minuto.', 429)
   let body
   try { body = AppointmentSchema.parse(await req.json()) } catch (e) { return badZod(e) }
+  if (!(await verifyCaptcha(body.captchaToken))) return err('Verificación CAPTCHA inválida', 403)
+
+  // Un paciente solo puede reservar turnos a su propio nombre (evita suplantación)
+  if (user.role === 'patient') {
+    body.patientId = user.id
+    body.patientEmail = user.email
+    body.patientName = user.name
+  }
 
   const nowMsUtc = nowMs()
   const startMs = argentinaLocalToUtcMs(body.date, body.startTime)
@@ -479,6 +559,9 @@ async function handleCreateAppointment(req) {
 }
 
 async function handleListAppointments(req) {
+  const user = await currentUser(req)
+  const gate = requireRole(user, ['admin', 'reception', 'doctor', 'patient'])
+  if (gate) return gate
   const { searchParams } = new URL(req.url)
   const q = {}
   for (const k of ['doctorId','patientId','branchId','specialtyId','status']) {
@@ -486,17 +569,37 @@ async function handleListAppointments(req) {
   }
   const from = searchParams.get('from'), to = searchParams.get('to')
   if (from || to) { q.date = {}; if (from) q.date.$gte = from; if (to) q.date.$lte = to }
+  // Scoping por rol: cada uno solo ve lo que le corresponde
+  if (user.role === 'patient') q.patientId = user.id
+  else if (user.role === 'doctor') q.doctorId = user.doctorId
   const db = await getDb()
   const list = await db.collection('appointments').find(q).sort({ date: 1, startTime: 1 }).toArray()
   return ok({ appointments: list.map(({ _id, ...r }) => decryptFields(r, SENSITIVE_APPT)) })
 }
 
 async function handleUpdateAppointment(req, { id }) {
+  const user = await currentUser(req)
+  const gate = requireRole(user, ['admin', 'reception', 'doctor', 'patient'])
+  if (gate) return gate
   let body
   try { body = UpdateAppointmentSchema.parse(await req.json()) } catch (e) { return badZod(e) }
   const db = await getDb()
   const appt = await db.collection('appointments').findOne({ id })
   if (!appt) return err('Turno no encontrado', 404)
+
+  // Autorización sobre el turno concreto
+  const isStaff = ['admin', 'reception'].includes(user.role)
+  const isOwnPatient = user.role === 'patient' && appt.patientId === user.id
+  const isOwnAgenda = user.role === 'doctor' && appt.doctorId === user.doctorId
+  if (!isStaff && !isOwnPatient && !isOwnAgenda) return err('Sin permisos sobre este turno', 403)
+  // Un paciente solo puede cancelar sus propios turnos (no reprogramar ni editar notas)
+  if (isOwnPatient && !isStaff) {
+    if (body.status && body.status !== 'cancelled') return err('Solo puede cancelar sus turnos', 403)
+    if (body.date || body.startTime || body.endTime || body.notes !== undefined) {
+      return err('Solo puede cancelar sus turnos', 403)
+    }
+  }
+
   const update = { updatedAt: new Date() }
   if (body.status) update.status = body.status
   if (body.cancelReason !== undefined) update.cancelReason = body.cancelReason
@@ -563,6 +666,7 @@ async function router(req, ctx) {
     if (path === 'seed' && method === 'POST') return await handleSeed(req)
 
     if (path === 'auth/login' && method === 'POST') return await handleLogin(req)
+    if (path === 'auth/register' && method === 'POST') return await handleRegister(req)
     if (path === 'auth/logout' && method === 'POST') return await handleLogout(req)
     if (path === 'auth/me' && method === 'GET') return await handleMe(req)
     if (path === 'auth/2fa/setup' && method === 'POST') return await handle2FASetup(req)

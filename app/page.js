@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, Fragment } from 'react'
+import { useEffect, useMemo, useState, useRef, Fragment } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import {
@@ -49,6 +49,40 @@ async function api(path, opts = {}) {
   return data
 }
 
+/* Cloudflare Turnstile (CAPTCHA). Si NEXT_PUBLIC_TURNSTILE_SITE_KEY no está
+   configurado, el widget no se renderiza y el backend tampoco lo exige. */
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ''
+
+function Captcha({ onVerify }) {
+  const containerRef = useRef(null)
+  const renderedRef = useRef(false)
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY || renderedRef.current || !containerRef.current) return
+    renderedRef.current = true
+    const render = () => {
+      if (!window.turnstile || !containerRef.current) return
+      try {
+        window.turnstile.render(containerRef.current, {
+          sitekey: TURNSTILE_SITE_KEY,
+          theme: 'light',
+          callback: (token) => onVerify(token),
+          'expired-callback': () => onVerify(null),
+          'error-callback': () => onVerify(null),
+        })
+      } catch {}
+    }
+    if (window.turnstile) { render(); return }
+    const s = document.createElement('script')
+    s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+    s.async = true
+    s.onload = render
+    document.body.appendChild(s)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  if (!TURNSTILE_SITE_KEY) return null
+  return <div ref={containerRef} className="mt-2" />
+}
+
 function Brand({ dark = false }) {
   return (
     <div className="flex items-center gap-3">
@@ -64,6 +98,15 @@ function Brand({ dark = false }) {
 }
 
 function Landing({ onStart, onLogin }) {
+  const [dbSpecialties, setDbSpecialties] = useState([])
+  useEffect(() => {
+    api('specialties').then(r => setDbSpecialties(r.specialties || [])).catch(() => {})
+  }, [])
+  // Mapea el nombre hardcodeado de la tarjeta al id real de la BD.
+  // Si no existe (ej: Neurología), devuelve null y el asistente muestra el paso 1.
+  const findSpecialtyId = (name) =>
+    dbSpecialties.find(s => s.name.toLowerCase() === name.toLowerCase())?.id || null
+
   return (
     <div className="min-h-screen bg-background">
       <header className="absolute inset-x-0 top-0 z-10">
@@ -126,7 +169,7 @@ function Landing({ onStart, onLogin }) {
             { icon: Brain, name: 'Neurología' }, { icon: Stethoscope, name: 'Clínica Médica' },
           ].map(({ icon: I, name }, i) => (
             <motion.div key={name} initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.05 }}>
-              <Card className="border-border/60 shadow-soft hover:shadow-luxury hover:-translate-y-1 transition-all group cursor-pointer" onClick={onStart}>
+              <Card className="border-border/60 shadow-soft hover:shadow-luxury hover:-translate-y-1 transition-all group cursor-pointer" onClick={() => onStart(findSpecialtyId(name))}>
                 <CardContent className="p-6 flex flex-col items-center text-center">
                   <div className="w-14 h-14 rounded-full gradient-luxury flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                     <I className="w-6 h-6 text-gold" />
@@ -164,14 +207,33 @@ function LoginView({ onBack, onLogged }) {
   const [twoFAState, setTwoFAState] = useState(null) // { setup, setupToken?, qr?, secret? }
   const [totpInput, setTotpInput] = useState('')
   const [recovery, setRecovery] = useState(null)
+  const [reg, setReg] = useState({ name: '', phone: '', captchaToken: null })
 
   useEffect(() => {
     if (demos[tab]) {
       setEmail(demos[tab].email)
       setPassword(demos[tab].password)
+    } else if (tab === 'register') {
+      setEmail(''); setPassword('')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
+
+  async function submitRegister(e) {
+    e?.preventDefault()
+    setLoading(true)
+    try {
+      const res = await api('auth/register', { method: 'POST', body: JSON.stringify({
+        name: reg.name, email, password, phone: reg.phone || undefined,
+        captchaToken: reg.captchaToken || undefined,
+      }) })
+      localStorage.setItem('cbs_token', res.token)
+      localStorage.setItem('cbs_user', JSON.stringify(res.user))
+      toast.success(`Cuenta creada, bienvenido/a ${res.user.name}`)
+      onLogged(res.user)
+    } catch (e2) { toast.error(e2.message) }
+    finally { setLoading(false) }
+  }
 
   async function submit(e) {
     e?.preventDefault()
@@ -227,11 +289,12 @@ function LoginView({ onBack, onLogged }) {
           </CardHeader>
           <CardContent>
             <Tabs value={tab} onValueChange={setTab}>
-              <TabsList className="grid grid-cols-4 mb-5 bg-muted/60">
+              <TabsList className="grid grid-cols-5 mb-5 bg-muted/60">
                 <TabsTrigger value="patient" className="text-xs">Paciente</TabsTrigger>
                 <TabsTrigger value="doctor" className="text-xs">Médico</TabsTrigger>
                 <TabsTrigger value="reception" className="text-xs">Recep.</TabsTrigger>
                 <TabsTrigger value="admin" className="text-xs">Admin</TabsTrigger>
+                <TabsTrigger value="register" className="text-xs">Crear cuenta</TabsTrigger>
               </TabsList>
               {Object.keys(demos).map(k => (
                 <TabsContent key={k} value={k}>
@@ -253,6 +316,31 @@ function LoginView({ onBack, onLogged }) {
                   </form>
                 </TabsContent>
               ))}
+              <TabsContent value="register">
+                <form onSubmit={submitRegister} className="space-y-4">
+                  <div>
+                    <Label>Nombre completo</Label>
+                    <Input value={reg.name} onChange={e => setReg(r => ({ ...r, name: e.target.value }))} className="mt-1" required />
+                  </div>
+                  <div>
+                    <Label>Email</Label>
+                    <Input type="email" value={email} onChange={e => setEmail(e.target.value)} className="mt-1" required />
+                  </div>
+                  <div>
+                    <Label>Contraseña</Label>
+                    <Input type="password" value={password} onChange={e => setPassword(e.target.value)} className="mt-1" required />
+                    <div className="text-xs text-muted-foreground mt-1">Mínimo 10 caracteres, con mayúscula, número y símbolo.</div>
+                  </div>
+                  <div>
+                    <Label>Teléfono (opcional)</Label>
+                    <Input value={reg.phone} onChange={e => setReg(r => ({ ...r, phone: e.target.value }))} className="mt-1" />
+                  </div>
+                  <Captcha onVerify={token => setReg(r => ({ ...r, captchaToken: token }))} />
+                  <Button type="submit" disabled={loading} className="w-full bg-emerald-deep hover:bg-emerald-deep/90 text-primary-foreground">
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Crear cuenta'}
+                  </Button>
+                </form>
+              </TabsContent>
             </Tabs>
             <button onClick={onBack} className="text-xs text-muted-foreground hover:text-navy mt-4 w-full text-center">
               ← Volver al inicio
@@ -315,12 +403,12 @@ function LoginView({ onBack, onLogged }) {
   )
 }
 
-function BookingWizard({ user, onDone }) {
-  const [step, setStep] = useState(1)
+function BookingWizard({ user, onDone, initialSpecialtyId = null }) {
+  const [step, setStep] = useState(initialSpecialtyId ? 2 : 1)
   const [specialties, setSpecialties] = useState([])
   const [branches, setBranches] = useState([])
   const [doctors, setDoctors] = useState([])
-  const [specialtyId, setSpecialtyId] = useState(null)
+  const [specialtyId, setSpecialtyId] = useState(initialSpecialtyId || null)
   const [branchId, setBranchId] = useState(null)
   const [doctor, setDoctor] = useState(null)
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
@@ -329,6 +417,7 @@ function BookingWizard({ user, onDone }) {
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [form, setForm] = useState({ name: user?.name || '', email: user?.email || '', phone: user?.phone || '', notes: '' })
+  const [captchaToken, setCaptchaToken] = useState(null)
   const [confirmedAppt, setConfirmedAppt] = useState(null)
 
   useEffect(() => {
@@ -361,6 +450,7 @@ function BookingWizard({ user, onDone }) {
         patientName: form.name, patientEmail: form.email, patientPhone: form.phone,
         doctorId: doctor.id, specialtyId, branchId,
         date, startTime: slot.startTime, endTime: slot.endTime, notes: form.notes,
+        captchaToken: captchaToken || undefined,
       }
       const { appointment } = await api('appointments', { method: 'POST', body: JSON.stringify(body) })
       setConfirmedAppt(appointment)
@@ -522,7 +612,10 @@ function BookingWizard({ user, onDone }) {
                     <div className="flex items-start gap-3"><Building2 className="w-4 h-4 text-emerald-deep mt-0.5" /><div><div className="text-muted-foreground">Sede</div><div className="font-medium">{branches.find(b => b.id === branchId)?.name}</div></div></div>
                     <div className="flex items-start gap-3"><CalendarIcon className="w-4 h-4 text-emerald-deep mt-0.5" /><div><div className="text-muted-foreground">Fecha y hora</div><div className="font-medium">{date} • {slot?.startTime} - {slot?.endTime}</div></div></div>
                   </div>
-                  <Button onClick={confirm} disabled={submitting} className="w-full mt-6 bg-gold hover:bg-gold/90 text-navy font-semibold">
+                  <div className="mt-4">
+                    <Captcha onVerify={setCaptchaToken} />
+                  </div>
+                  <Button onClick={confirm} disabled={submitting || (TURNSTILE_SITE_KEY && !captchaToken)} className="w-full mt-4 bg-gold hover:bg-gold/90 text-navy font-semibold">
                     {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirmar reserva'}
                   </Button>
                 </div>
@@ -933,6 +1026,15 @@ function App() {
   const [user, setUser] = useState(null)
   const [view, setView] = useState('landing')
   const [ready, setReady] = useState(false)
+  const [bookSpecialtyId, setBookSpecialtyId] = useState(null)
+  const [bookingIntent, setBookingIntent] = useState(false)
+
+  // Reservar requiere cuenta: sin sesión se redirige al login conservando la intención
+  function startBooking(specialtyId = null) {
+    setBookSpecialtyId(specialtyId || null)
+    if (user) { setView('book') }
+    else { setBookingIntent(true); setView('login') }
+  }
 
   useEffect(() => {
     api('seed', { method: 'POST' }).catch(() => {})
@@ -951,38 +1053,41 @@ function App() {
   function logout() {
     localStorage.removeItem('cbs_token'); localStorage.removeItem('cbs_user')
     setUser(null); setView('landing')
+    setBookingIntent(false); setBookSpecialtyId(null)
     toast.success('Sesión cerrada')
   }
   function onLogin(u) {
     setUser(u)
-    setView(u.role === 'patient' ? 'my' : u.role === 'doctor' ? 'doctor' : 'agenda')
+    if (bookingIntent) {
+      setBookingIntent(false)
+      setView('book')
+    } else {
+      setView(u.role === 'patient' ? 'my' : u.role === 'doctor' ? 'doctor' : 'agenda')
+    }
   }
 
   if (!ready) return null
 
   if (!user) {
-    if (view === 'login') return <LoginView onBack={() => setView('landing')} onLogged={onLogin} />
-    if (view === 'book') return (
-      <div>
-        <header className="border-b border-border/60 bg-card sticky top-0 z-30">
-          <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
-            <Brand />
-            <Button variant="ghost" onClick={() => setView('landing')}>Volver</Button>
-          </div>
-        </header>
-        <BookingWizard user={null} onDone={() => setView('landing')} />
-      </div>
-    )
-    return <Landing onStart={() => setView('book')} onLogin={() => setView('login')} />
+    if (view === 'login') return <LoginView onBack={() => { setBookingIntent(false); setView('landing') }} onLogged={onLogin} />
+    // Reservar turnos requiere cuenta: sin sesión se envía al login conservando la intención
+    return <Landing onStart={startBooking} onLogin={() => setView('login')} />
   }
 
   return (
-    <AppShell user={user} view={view} setView={setView} onLogout={logout}>
+    <AppShell user={user} view={view} setView={k => { if (k === 'book') setBookSpecialtyId(null); setView(k) }} onLogout={logout}>
       {view === 'agenda' && <AgendaCalendar />}
       {view === 'stats' && <AdminStats />}
       {view === 'doctor' && <DoctorAgenda user={user} />}
-      {view === 'my' && <MyAppointments user={user} onBook={() => setView('book')} />}
-      {view === 'book' && <BookingWizard user={user} onDone={() => setView(user.role === 'patient' ? 'my' : 'agenda')} />}
+      {view === 'my' && <MyAppointments user={user} onBook={() => { setBookSpecialtyId(null); setView('book') }} />}
+      {view === 'book' && (
+        <BookingWizard
+          key={bookSpecialtyId || 'general'}
+          user={user}
+          initialSpecialtyId={bookSpecialtyId}
+          onDone={() => { setBookSpecialtyId(null); setView(user.role === 'patient' ? 'my' : 'agenda') }}
+        />
+      )}
     </AppShell>
   )
 }
