@@ -47,6 +47,9 @@ ENCRYPTION_KEY=pon-aqui-una-clave-hexadecimal-de-64-caracteres
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | cliente | Site key publica de Cloudflare Turnstile. Se usa para renderizar el widget CAPTCHA en la reserva de turnos. |
 | `TURNSTILE_SECRET_KEY` | servidor | Secret key de Turnstile. El servidor la usa para validar el token del CAPTCHA (`siteverify`). |
 | `SEED_SECRET` | servidor | Clave opcional para permitir `POST /api/seed?force=1` mediante el header `X-Seed-Secret`. |
+| `NEXT_PUBLIC_WHATSAPP_NUMBER` | cliente | Numero de WhatsApp de la clinica, formato internacional y solo digitos (ej: `5491155555555`). Se usa en el centro de ayuda y en la bandeja de solicitudes. |
+| `NEXT_PUBLIC_CLINIC_PHONE` | cliente | Telefono que se muestra en el boton "Llamar" del centro de ayuda. |
+| `WHATSAPP_NUMBER` | servidor | Opcional. Numero que usa la API para armar el link de WhatsApp. Si esta vacio, toma `NEXT_PUBLIC_WHATSAPP_NUMBER`. |
 
 **Reserva de turnos (anti-bot):** desde el endurecimiento de seguridad, `POST /api/appointments` exige una sesion autenticada (paciente, recepcion o admin). Ademas, si `TURNSTILE_SECRET_KEY` y `NEXT_PUBLIC_TURNSTILE_SITE_KEY` estan configuradas, se exige un token valido de Turnstile. Si se dejan vacias, el CAPTCHA no bloquea (pensado solo para desarrollo).
 
@@ -100,6 +103,24 @@ Invoke-WebRequest -Uri http://localhost:3000/api/health
 ## Usuarios demo
 
 Las credenciales de demostracion se encuentran en `memory/test_credentials.md`. Cambialas antes de usar la aplicacion fuera de desarrollo.
+
+## Centro de ayuda y solicitudes de turno
+
+En la esquina inferior derecha de la pagina publica hay un boton **Ayuda**. Abre un panel con:
+
+- **Reservar turno online**: lleva al registro/login existente (la reserva online sigue requiriendo cuenta).
+- **Solicitar turno sin cuenta**: formulario corto (nombre, telefono, especialidad, sede y preferencia). El pedido se guarda en la coleccion `whatsapp_requests` y aparece en **Solicitudes** para admin y recepcion.
+- **Escribir por WhatsApp**: abre `wa.me` con un mensaje precargado. El visitante debe pulsar *Enviar* en WhatsApp; no se envia automaticamente.
+- **Llamar a la clinica**: abre el marcador del telefono.
+- **Preguntas frecuentes**: turnos, sedes, cancelaciones, coberturas y urgencias.
+
+Las solicitudes se pueden marcar como **Nueva**, **Contactada** o **Cerrada** desde la bandeja de admin/recepcion. El telefono, la preferencia y la consulta se guardan cifrados (AES-GCM) y se descifran solo para el personal autorizado.
+
+La ruta publica `POST /api/whatsapp-requests` tiene un limite de 5 solicitudes cada 10 minutos por IP y un campo honeypot anti-bot. No usa Turnstile para no agregar friccion al visitante; si mas adelante hace falta, se puede sumar.
+
+**Envio automatico:** el flujo actual es *click-to-chat* (el visitante envia desde su WhatsApp). Para que el servidor envie mensajes sin intervencion del usuario hace falta integrar la WhatsApp Cloud API de Meta (o Twilio) con un numero verificado y sus credenciales. La bandeja y el modelo de datos ya quedan preparados para esa integracion.
+
+El numero configurado en `.env.local` (`NEXT_PUBLIC_WHATSAPP_NUMBER`) es el que recibe los mensajes del centro de ayuda y de la bandeja. Si lo cambias, reinicia el servidor para que Next.js vuelva a compilar el valor publico. `NEXT_PUBLIC_CLINIC_PHONE` controla el telefono que muestra el boton **Llamar**.
 
 ## Pruebas automatizadas
 

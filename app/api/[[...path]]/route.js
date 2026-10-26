@@ -9,6 +9,7 @@ import {
   generateTotpSecret, totpUri, verifyTotp, generateRecoveryCodes,
   rateLimit, clientIp,
 } from '@/lib/security'
+import { DEFAULT_WHATSAPP_NUMBER, buildAppointmentRequestMessage, buildWaUrl } from '@/lib/whatsapp'
 
 /* ================= helpers ================= */
 const ok = (data, status = 200) => NextResponse.json(data, { status })
@@ -19,6 +20,7 @@ const SENSITIVE_ROLES_2FA = ['admin', 'doctor']
 const APPT_MIN_HOURS_AHEAD = 2
 const SEED_SECRET = process.env.SEED_SECRET || ''
 const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET_KEY || ''
+const WHATSAPP_NUMBER = process.env.WHATSAPP_NUMBER || process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || DEFAULT_WHATSAPP_NUMBER
 
 /* ---------- Cloudflare Turnstile (CAPTCHA) ---------- */
 async function verifyCaptcha(token) {
@@ -146,6 +148,16 @@ const UpdateAppointmentSchema = z.object({
   endTime: timeStr.optional(),
   notes: z.string().optional(),
 })
+const WhatsAppRequestSchema = z.object({
+  name: z.string().trim().min(2, 'Nombre requerido').max(80, 'Nombre demasiado largo'),
+  dni: z.string().trim().min(4, 'DNI requerido').max(30, 'DNI demasiado largo'),
+  phone: z.string().trim().max(30).optional().default(''),
+  specialtyId: z.string().max(80).optional().default(''),
+  branchId: z.string().max(80).optional().default(''),
+  preferred: z.string().trim().max(120, 'Preferencia demasiado larga').optional().default(''),
+  message: z.string().trim().max(600, 'Consulta demasiado larga').optional().default(''),
+  website: z.string().max(200).optional().default(''),
+})
 
 /* ================= SEED ================= */
 async function handleSeed(req) {
@@ -169,7 +181,7 @@ async function handleSeed(req) {
   }
 
   // wipe
-  for (const c of ['users','specialties','branches','offices','doctors','schedules','appointments','audit_logs']) {
+  for (const c of ['users','specialties','branches','offices','doctors','schedules','appointments','whatsapp_requests','audit_logs']) {
     await db.collection(c).deleteMany({})
   }
 
@@ -628,6 +640,104 @@ async function handleUpdateAppointment(req, { id }) {
   return ok({ appointment: decryptFields(safe, SENSITIVE_APPT) })
 }
 
+/* ================= SOLICITUDES WHATSAPP (centro de ayuda) ================= */
+async function handleCreateWhatsAppRequest(req) {
+  const ip = clientIp(req)
+  const rl = rateLimit(`wa-request:${ip}`, 5, 10 * 60_000)
+  if (!rl.allowed) return err('Demasiadas solicitudes. Esperá unos minutos.', 429)
+
+  let body
+  try { body = WhatsAppRequestSchema.parse(await req.json()) } catch (e) { return badZod(e) }
+  if (body.website) return ok({ ok: true }) // honeypot: respondemos ok sin guardar nada
+
+  const db = await getDb()
+  const specialty = body.specialtyId
+    ? await db.collection('specialties').findOne({ id: body.specialtyId })
+    : null
+  const branch = body.branchId
+    ? await db.collection('branches').findOne({ id: body.branchId })
+    : null
+
+  const doc = {
+    id: uuidv4(),
+    name: body.name,
+    dni: encrypt(body.dni || ''),
+    phone: encrypt(body.phone || ''),
+    specialtyId: specialty?.id || '',
+    specialtyName: specialty?.name || '',
+    branchId: branch?.id || '',
+    branchName: branch?.name || '',
+    preferred: encrypt(body.preferred || ''),
+    message: encrypt(body.message || ''),
+    status: 'new',
+    source: 'web-widget',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }
+  await db.collection('whatsapp_requests').insertOne(doc)
+
+  const message = buildAppointmentRequestMessage({
+    name: body.name,
+    dni: body.dni,
+    phone: body.phone,
+    specialtyName: doc.specialtyName,
+    branchName: doc.branchName,
+    preferred: body.preferred,
+    message: body.message,
+  })
+
+  await audit(db, req, {
+    action: 'CREATE_WHATSAPP_REQUEST',
+    entity: 'whatsapp_request',
+    entityId: doc.id,
+    newValues: { specialtyId: doc.specialtyId, branchId: doc.branchId, status: doc.status },
+  })
+
+  return ok({
+    request: { id: doc.id, status: doc.status, createdAt: doc.createdAt },
+    waUrl: buildWaUrl(WHATSAPP_NUMBER, message),
+    message,
+  }, 201)
+}
+
+async function handleListWhatsAppRequests(req) {
+  const u = await currentUser(req); const gate = requireRole(u, ['admin', 'reception']); if (gate) return gate
+  const db = await getDb()
+  const url = new URL(req.url)
+  const status = url.searchParams.get('status')
+  const filter = ['new', 'contacted', 'closed'].includes(status) ? { status } : {}
+  const rows = await db.collection('whatsapp_requests').find(filter).sort({ createdAt: -1 }).limit(200).toArray()
+  return ok({
+    requests: rows.map(({ _id, ...r }) => ({
+      ...r,
+      dni: r.dni ? decrypt(r.dni) : '',
+      phone: r.phone ? decrypt(r.phone) : '',
+      preferred: r.preferred ? decrypt(r.preferred) : '',
+      message: r.message ? decrypt(r.message) : '',
+    })),
+  })
+}
+
+async function handleUpdateWhatsAppRequest(req, { id }) {
+  const u = await currentUser(req); const gate = requireRole(u, ['admin', 'reception']); if (gate) return gate
+  let body
+  try { body = await req.json() } catch { return err('Datos inválidos', 400) }
+  const status = String(body?.status || '')
+  if (!['new', 'contacted', 'closed'].includes(status)) return err('Estado inválido', 400)
+
+  const db = await getDb()
+  const existing = await db.collection('whatsapp_requests').findOne({ id })
+  if (!existing) return err('Solicitud no encontrada', 404)
+
+  await db.collection('whatsapp_requests').updateOne({ id }, { $set: {
+    status,
+    updatedAt: new Date(),
+    handledBy: u.id,
+    handledByName: u.name,
+  } })
+  return ok({ ok: true, status })
+}
+
 /* ================= STATS ================= */
 async function handleStats() {
   const db = await getDb()
@@ -684,6 +794,11 @@ async function router(req, ctx) {
     if (path === 'appointments' && method === 'GET') return await handleListAppointments(req)
     const apptMatch = path.match(/^appointments\/([^/]+)$/)
     if (apptMatch && method === 'PATCH') return await handleUpdateAppointment(req, { id: apptMatch[1] })
+
+    if (path === 'whatsapp-requests' && method === 'POST') return await handleCreateWhatsAppRequest(req)
+    if (path === 'whatsapp-requests' && method === 'GET') return await handleListWhatsAppRequests(req)
+    const waMatch = path.match(/^whatsapp-requests\/([^/]+)$/)
+    if (waMatch && method === 'PATCH') return await handleUpdateWhatsAppRequest(req, { id: waMatch[1] })
 
     if (path === 'stats' && method === 'GET') return await handleStats()
     if (path === 'audit' && method === 'GET') return await handleAudit(req)

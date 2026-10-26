@@ -19,6 +19,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { HelpWidget } from '@/components/help-widget'
+import { WhatsAppInbox } from '@/components/whatsapp-inbox'
+import { api } from '@/lib/api-client'
 
 const ICONS = { Stethoscope, Sparkles, Baby, HeartPulse, Flower2, Bone, Eye, Brain }
 const STATUS_LABEL = {
@@ -32,21 +35,6 @@ const STATUS_COLOR = {
   attended: 'bg-gray-100 text-gray-800 border-gray-200',
   cancelled: 'bg-rose-100 text-rose-800 border-rose-200',
   no_show: 'bg-orange-100 text-orange-800 border-orange-200',
-}
-
-async function api(path, opts = {}) {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('cbs_token') : null
-  const res = await fetch(`/api/${path}`, {
-    ...opts,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(opts.headers || {}),
-    },
-  })
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || 'Error de red')
-  return data
 }
 
 /* Cloudflare Turnstile (CAPTCHA). Si NEXT_PUBLIC_TURNSTILE_SITE_KEY no está
@@ -987,8 +975,8 @@ function AdminStats() {
 
 function AppShell({ user, view, setView, onLogout, children }) {
   const nav = {
-    admin:     [['agenda','Agenda'], ['stats','Dashboard']],
-    reception: [['agenda','Agenda'], ['book','Nuevo turno']],
+    admin:     [['agenda','Agenda'], ['stats','Dashboard'], ['inbox','Solicitudes']],
+    reception: [['agenda','Agenda'], ['inbox','Solicitudes']],
     doctor:    [['doctor','Mi agenda']],
     patient:   [['my','Mis turnos'], ['book','Reservar']],
   }[user.role] || []
@@ -1069,26 +1057,40 @@ function App() {
   if (!ready) return null
 
   if (!user) {
-    if (view === 'login') return <LoginView onBack={() => { setBookingIntent(false); setView('landing') }} onLogged={onLogin} />
+    if (view === 'login') return (
+      <>
+        <LoginView onBack={() => { setBookingIntent(false); setView('landing') }} onLogged={onLogin} />
+        <HelpWidget onBook={startBooking} />
+      </>
+    )
     // Reservar turnos requiere cuenta: sin sesión se envía al login conservando la intención
-    return <Landing onStart={startBooking} onLogin={() => setView('login')} />
+    return (
+      <>
+        <Landing onStart={startBooking} onLogin={() => setView('login')} />
+        <HelpWidget onBook={startBooking} />
+      </>
+    )
   }
 
   return (
-    <AppShell user={user} view={view} setView={k => { if (k === 'book') setBookSpecialtyId(null); setView(k) }} onLogout={logout}>
-      {view === 'agenda' && <AgendaCalendar />}
-      {view === 'stats' && <AdminStats />}
-      {view === 'doctor' && <DoctorAgenda user={user} />}
-      {view === 'my' && <MyAppointments user={user} onBook={() => { setBookSpecialtyId(null); setView('book') }} />}
-      {view === 'book' && (
-        <BookingWizard
-          key={bookSpecialtyId || 'general'}
-          user={user}
-          initialSpecialtyId={bookSpecialtyId}
-          onDone={() => { setBookSpecialtyId(null); setView(user.role === 'patient' ? 'my' : 'agenda') }}
-        />
-      )}
-    </AppShell>
+    <>
+      <AppShell user={user} view={view} setView={k => { if (k === 'book') setBookSpecialtyId(null); setView(k) }} onLogout={logout}>
+        {view === 'agenda' && <AgendaCalendar />}
+        {view === 'stats' && <AdminStats />}
+        {view === 'inbox' && <WhatsAppInbox />}
+        {view === 'doctor' && <DoctorAgenda user={user} />}
+        {view === 'my' && <MyAppointments user={user} onBook={() => { setBookSpecialtyId(null); setView('book') }} />}
+        {view === 'book' && (
+          <BookingWizard
+            key={bookSpecialtyId || 'general'}
+            user={user}
+            initialSpecialtyId={bookSpecialtyId}
+            onDone={() => { setBookSpecialtyId(null); setView(user.role === 'patient' ? 'my' : 'agenda') }}
+          />
+        )}
+      </AppShell>
+      <HelpWidget onBook={startBooking} user={user} />
+    </>
   )
 }
 
