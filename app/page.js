@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
@@ -285,7 +285,6 @@ function LoginView({ onBack, onLogged }) {
         <Card className="glass shadow-luxury border-white/20">
           <CardHeader className="pb-3">
             <CardTitle className="font-display text-2xl text-navy">Ingreso al portal</CardTitle>
-            <CardDescription>Pacientes y recepción: DNI + contraseña. Médicos y admin: email.</CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs value={tab} onValueChange={setTab}>
@@ -325,7 +324,6 @@ function LoginView({ onBack, onLogged }) {
                     </div>
                     <div className="rounded-lg bg-muted/50 border border-border/60 p-3 text-xs text-muted-foreground">
                       Demo pre-cargado: <span className="font-medium text-navy">{demos[k].label}</span>
-                      <div className="mt-1">Pacientes y recepción ingresan con DNI + contraseña.</div>
                     </div>
                     <Button type="submit" disabled={loading} className="w-full bg-emerald-deep hover:bg-emerald-deep/90 text-primary-foreground">
                       {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Ingresar'}
