@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import {
-  CheckCheck, Clock3, CreditCard, Inbox, Loader2, MapPin, MessageCircle, Phone, RefreshCw, Stethoscope, XCircle,
+  CheckCheck, ClipboardList, Clock3, CreditCard, Inbox, Loader2, MapPin, MessageCircle, Phone, RefreshCw, Stethoscope, XCircle,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { ClinicalHistoryDialog } from '@/components/clinical-history'
 import { api } from '@/lib/api-client'
 import { buildWaUrl } from '@/lib/whatsapp'
 
@@ -53,6 +54,7 @@ export function WhatsAppInbox() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
   const [busyId, setBusyId] = useState(null)
+  const [historyFor, setHistoryFor] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -157,6 +159,11 @@ export function WhatsAppInbox() {
                       <Badge className={`border ${STATUS[item.status]?.className || ''}`}>
                         {STATUS[item.status]?.label || item.status}
                       </Badge>
+                      {item.patientId && !item.patientHasAccount && (
+                        <Badge className="border border-amber-200 bg-amber-100 text-amber-800">
+                          Cuenta pendiente
+                        </Badge>
+                      )}
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                       <span className="inline-flex items-center gap-1">
@@ -179,6 +186,11 @@ export function WhatsAppInbox() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
+                    {item.patientId && (
+                      <Button size="sm" variant="outline" onClick={() => setHistoryFor(item)}>
+                        <ClipboardList className="h-3.5 w-3.5" /> Historial
+                      </Button>
+                    )}
                     <Button asChild size="sm" className="bg-emerald-deep text-white hover:bg-emerald-deep/90">
                       <a href={buildWaUrl(item.phone || '', replyText(item))} target="_blank" rel="noopener noreferrer">
                         <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
@@ -223,6 +235,11 @@ export function WhatsAppInbox() {
           ))}
         </div>
       )}
+      <ClinicalHistoryDialog
+        open={!!historyFor}
+        onOpenChange={o => !o && setHistoryFor(null)}
+        patientId={historyFor?.patientId}
+      />
     </div>
   )
 }

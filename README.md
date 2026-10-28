@@ -104,12 +104,54 @@ Invoke-WebRequest -Uri http://localhost:3000/api/health
 
 Las credenciales de demostracion se encuentran en `memory/test_credentials.md`. Cambialas antes de usar la aplicacion fuera de desarrollo.
 
+### Acceso con DNI
+
+- **Pacientes y recepcion** inician sesion con **DNI + contraseña**. El DNI es el identificador unico del paciente (no el email).
+- **Medicos y administradores** siguen ingresando con email + contraseña y 2FA obligatorio.
+- Al crear una cuenta de paciente se pide DNI, nombre, contraseña y, opcionalmente, email y telefono.
+- Si el DNI ya existe porque la persona dejo una solicitud por WhatsApp, al crear la cuenta se **vincula automaticamente** la ficha y todo el historial de turnos.
+- El DNI se guarda cifrado (AES-GCM) y se indexa mediante un hash determinístico (`dniHash`) para mantener la unicidad sin exponer el valor.
+
+### Historial clinico
+
+Cada paciente tiene un historial asociado a su DNI con:
+
+- Todos sus turnos (proximos, atendidos, cancelados).
+- Las solicitudes recibidas por WhatsApp.
+- Las **evoluciones clinicas** que agrega el medico (motivo, diagnostico, tratamiento y notas).
+
+El paciente lo ve en **Historial clinico** dentro de su portal. Recepcion y admin pueden consultarlo desde la agenda o desde la bandeja de solicitudes, y el medico puede agregar evoluciones desde su agenda diaria.
+
+### Prueba automatica del flujo DNI
+
+Con el servidor de desarrollo corriendo:
+
+```powershell
+npm run dev
+# en otra terminal
+npm run test:dni
+```
+
+La prueba verifica login por DNI, creacion de ficha desde WhatsApp, reclamo del historial al registrarse, reserva de turno, aislamiento entre pacientes y acceso de recepcion. Al finalizar borra los datos que genero. Para conservarlos y probar la interfaz manualmente:
+
+```powershell
+npm run test:dni -- --keep
+```
+
+Para apuntar a otro puerto:
+
+```powershell
+$env:TEST_BASE_URL='http://localhost:3010'; npm run test:dni
+```
+
+El informe completo de la ultima ejecucion (60 casos automatizados) esta en `docs/Ejecucion_Plan_Pruebas_DNI_Historial.md`.
+
 ## Centro de ayuda y solicitudes de turno
 
 En la esquina inferior derecha de la pagina publica hay un boton **Ayuda**. Abre un panel con:
 
 - **Reservar turno online**: lleva al registro/login existente (la reserva online sigue requiriendo cuenta).
-- **Solicitar turno sin cuenta**: formulario corto (nombre, telefono, especialidad, sede y preferencia). El pedido se guarda en la coleccion `whatsapp_requests` y aparece en **Solicitudes** para admin y recepcion.
+- **Solicitar turno sin cuenta**: formulario corto (nombre, **DNI**, telefono, especialidad, sede y preferencia). El pedido se guarda en `whatsapp_requests`, crea/vincula la ficha del paciente por DNI y aparece en **Solicitudes** para admin y recepcion. Luego el paciente puede crear su cuenta con ese mismo DNI para acceder a su historial.
 - **Escribir por WhatsApp**: abre `wa.me` con un mensaje precargado. El visitante debe pulsar *Enviar* en WhatsApp; no se envia automaticamente.
 - **Llamar a la clinica**: abre el marcador del telefono.
 - **Preguntas frecuentes**: turnos, sedes, cancelaciones, coberturas y urgencias.

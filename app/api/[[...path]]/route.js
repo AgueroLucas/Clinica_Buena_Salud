@@ -7,7 +7,7 @@ import {
   hashPassword, verifyPassword, passwordStrong,
   signToken, verifyToken, encrypt, decrypt,
   generateTotpSecret, totpUri, verifyTotp, generateRecoveryCodes,
-  rateLimit, clientIp,
+  rateLimit, clientIp, hashDni, normalizeDni,
 } from '@/lib/security'
 import { DEFAULT_WHATSAPP_NUMBER, buildAppointmentRequestMessage, buildWaUrl } from '@/lib/whatsapp'
 
@@ -49,8 +49,10 @@ function argentinaLocalToUtcMs(dateStr, timeStr) {
 function nowMs() { return Date.now() }
 
 /* Encrypt/decrypt sensitive fields on the fly */
-const SENSITIVE_APPT = ['patientPhone', 'notes']
+const SENSITIVE_APPT = ['patientPhone', 'patientDni', 'notes']
 const SENSITIVE_USER = ['phone', 'dni', 'address']
+const SENSITIVE_RECORD = ['reason', 'diagnosis', 'treatment', 'notes']
+const SENSITIVE_WA = ['dni', 'phone', 'preferred', 'message']
 function encryptFields(obj, fields) {
   const out = { ...obj }
   for (const f of fields) if (out[f]) out[f] = encrypt(out[f])
@@ -61,6 +63,70 @@ function decryptFields(obj, fields) {
   const out = { ...obj }
   for (const f of fields) if (out[f]) out[f] = decrypt(out[f])
   return out
+}
+
+/** Busca un usuario por DNI. El DNI está cifrado, por eso se compara por dniHash. */
+async function findUserByDni(db, value) {
+  const dni = normalizeDni(value)
+  if (!dni) return null
+  const dniHash = hashDni(dni)
+  const direct = await db.collection('users').findOne({ dniHash })
+  if (direct) return direct
+  // Compatibilidad con registros viejos: DNI cifrado sin dniHash.
+  const users = await db.collection('users').find({}).toArray()
+  for (const user of users) {
+    if (normalizeDni(decrypt(user.dni)) !== dni) continue
+    try { await db.collection('users').updateOne({ id: user.id }, { $set: { dniHash } }) } catch {}
+    return { ...user, dniHash }
+  }
+  return null
+}
+
+/**
+ * Devuelve el paciente asociado al DNI o crea un registro "sin cuenta".
+ * Estos registros se generan con las solicitudes de WhatsApp y luego el
+ * paciente los reclama al crear su cuenta con el mismo DNI.
+ */
+async function findOrCreatePatientByDni(db, { dni, name, phone, email, origin = 'whatsapp' } = {}) {
+  const normalized = normalizeDni(dni)
+  if (!normalized) return null
+  const dniHash = hashDni(normalized)
+  let patient = await findUserByDni(db, normalized)
+  if (patient) {
+    const update = {}
+    if (name && !patient.name) update.name = name.trim()
+    if (phone && !decrypt(patient.phone)) update.phone = encrypt(phone)
+    if (email && !patient.email) update.email = String(email).toLowerCase().trim()
+    if (!patient.dniHash) update.dniHash = dniHash
+    if (Object.keys(update).length) {
+      try { await db.collection('users').updateOne({ id: patient.id }, { $set: update }) } catch {}
+      patient = { ...patient, ...update }
+    }
+    return patient
+  }
+
+  patient = {
+    id: uuidv4(),
+    name: (name || '').trim() || `Paciente DNI ${normalized}`,
+    role: 'patient',
+    password: null,
+    hasAccount: false,
+    createdFrom: origin,
+    dni: encrypt(normalized),
+    dniHash,
+    phone: encrypt(phone || ''),
+    twoFactorEnabled: false,
+    failedLoginCount: 0,
+    createdAt: new Date(),
+  }
+  if (email) patient.email = String(email).toLowerCase().trim()
+  try {
+    await db.collection('users').insertOne(patient)
+    return patient
+  } catch (e) {
+    if (e.code === 11000 || e.code === '23505') return await findUserByDni(db, normalized)
+    throw e
+  }
 }
 
 async function audit(db, req, { userId = null, action, entity, entityId = null, oldValues = null, newValues = null }) {
@@ -114,13 +180,19 @@ const timeStr = z.string().regex(/^\d{2}:\d{2}$/, 'Formato HH:MM')
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD')
 
 const LoginSchema = z.object({
-  email: z.string().email('Email inválido'),
+  email: z.string().email('Email inválido').optional(),
+  dni: z.string().trim().min(6, 'DNI inválido').max(20, 'DNI inválido').optional(),
   password: z.string().min(1, 'Contraseña requerida'),
   totp: z.string().optional(),
+}).refine(data => data.email || data.dni, {
+  message: 'Ingrese su DNI o email',
+  path: ['dni'],
 })
 const RegisterSchema = z.object({
   name: z.string().min(3, 'Nombre requerido'),
-  email: z.string().email('Email inválido'),
+  dni: z.string().trim().min(6, 'DNI inválido').max(20, 'DNI inválido')
+    .refine(value => normalizeDni(value).length >= 6, 'DNI inválido'),
+  email: z.string().trim().email('Email inválido').optional().or(z.literal('')),
   password: z.string().min(1, 'Contraseña requerida'),
   phone: z.string().optional(),
   captchaToken: z.string().optional(),
@@ -128,7 +200,8 @@ const RegisterSchema = z.object({
 const AppointmentSchema = z.object({
   patientId: z.string().nullable().optional(),
   patientName: z.string().min(2).optional(),
-  patientEmail: z.string().email().optional(),
+  patientEmail: z.string().email().optional().or(z.literal('')),
+  patientDni: z.string().trim().min(6, 'DNI inválido').max(20).optional(),
   patientPhone: z.string().optional(),
   doctorId: z.string().min(1),
   specialtyId: z.string().min(1).optional(),
@@ -150,13 +223,23 @@ const UpdateAppointmentSchema = z.object({
 })
 const WhatsAppRequestSchema = z.object({
   name: z.string().trim().min(2, 'Nombre requerido').max(80, 'Nombre demasiado largo'),
-  dni: z.string().trim().min(4, 'DNI requerido').max(30, 'DNI demasiado largo'),
+  dni: z.string().trim().min(4, 'DNI requerido').max(30, 'DNI demasiado largo')
+    .refine(value => normalizeDni(value).length >= 6, 'DNI inválido'),
   phone: z.string().trim().max(30).optional().default(''),
   specialtyId: z.string().max(80).optional().default(''),
   branchId: z.string().max(80).optional().default(''),
   preferred: z.string().trim().max(120, 'Preferencia demasiado larga').optional().default(''),
   message: z.string().trim().max(600, 'Consulta demasiado larga').optional().default(''),
   website: z.string().max(200).optional().default(''),
+})
+const ClinicalRecordSchema = z.object({
+  patientId: z.string().min(1, 'Paciente requerido'),
+  appointmentId: z.string().optional(),
+  date: dateStr.optional(),
+  reason: z.string().trim().max(200).optional().default(''),
+  diagnosis: z.string().trim().max(2000).optional().default(''),
+  treatment: z.string().trim().max(2000).optional().default(''),
+  notes: z.string().trim().max(4000).optional().default(''),
 })
 
 /* ================= SEED ================= */
@@ -181,7 +264,7 @@ async function handleSeed(req) {
   }
 
   // wipe
-  for (const c of ['users','specialties','branches','offices','doctors','schedules','appointments','whatsapp_requests','audit_logs']) {
+  for (const c of ['users','specialties','branches','offices','doctors','schedules','appointments','whatsapp_requests','clinical_records','audit_logs']) {
     await db.collection(c).deleteMany({})
   }
 
@@ -245,6 +328,7 @@ async function handleSeed(req) {
   const nombres = ['María','Juan','Sofía','Diego','Camila','Nicolás','Valentina','Martín','Julieta','Federico','Lucía','Pablo','Agustina','Tomás','Florencia','Gonzalo','Micaela','Ezequiel','Belén','Ignacio']
   const apellidos = ['González','Pérez','Rodríguez','López','Martínez','García','Sánchez','Romero','Sosa','Torres','Álvarez','Ruiz','Ramírez','Flores','Acosta','Molina','Silva','Núñez','Herrera','Medina']
   for (let i=0;i<20;i++) {
+    const dni = `3${5000000+i*13}`
     patients.push({
       id: uuidv4(),
       email: `paciente${i+1}@ejemplo.com`,
@@ -252,7 +336,8 @@ async function handleSeed(req) {
       name: `${nombres[i]} ${apellidos[i]}`,
       role: 'patient',
       phone: encrypt(`+54 11 6${100+i}-${1000+i}`),
-      dni: encrypt(`3${5000000+i*13}`),
+      dni: encrypt(dni),
+      dniHash: hashDni(dni),
       address: encrypt(`Calle Falsa ${100+i}`),
       birthDate: `19${70+(i%30)}-0${(i%9)+1}-1${(i%9)}`,
       twoFactorEnabled: false, failedLoginCount: 0, createdAt: new Date(),
@@ -261,12 +346,17 @@ async function handleSeed(req) {
 
   const adminUser = { id: uuidv4(), email: 'admin@clinicabuenasalud.com', password: await hashPassword('Admin@2025!'),
     name: 'Administración', role: 'admin', phone: encrypt('+54 11 4800-0000'), twoFactorEnabled: false, failedLoginCount: 0, createdAt: new Date() }
+  const receptionDni = '30111222'
   const receptionUser = { id: uuidv4(), email: 'recepcion@clinicabuenasalud.com', password: await hashPassword('Recepcion@2025!'),
-    name: 'Recepción Central', role: 'reception', phone: encrypt('+54 11 4800-0001'), twoFactorEnabled: false, failedLoginCount: 0, createdAt: new Date() }
+    name: 'Recepción Central', role: 'reception', phone: encrypt('+54 11 4800-0001'),
+    dni: encrypt(receptionDni), dniHash: hashDni(receptionDni),
+    twoFactorEnabled: false, failedLoginCount: 0, createdAt: new Date() }
   // Keep legacy demo patient
+  const demoDni = '35678910'
   const demoPatient = { id: uuidv4(), email: 'paciente@ejemplo.com', password: await hashPassword('Paciente@2025!'),
     name: 'María González Demo', role: 'patient', phone: encrypt('+54 11 6100-1234'),
-    dni: encrypt('35.678.910'), birthDate: '1988-05-14', twoFactorEnabled: false, failedLoginCount: 0, createdAt: new Date() }
+    dni: encrypt(demoDni), dniHash: hashDni(demoDni),
+    birthDate: '1988-05-14', twoFactorEnabled: false, failedLoginCount: 0, createdAt: new Date() }
 
   await db.collection('specialties').insertMany(specialties)
   await db.collection('branches').insertMany(branches)
@@ -305,7 +395,7 @@ async function handleSeed(req) {
       const status = dayOffset < 0 ? (Math.random()>0.3?'attended':(Math.random()>0.5?'no_show':'cancelled')) : statuses[Math.floor(Math.random()*3)]
       sample.push({
         id: uuidv4(),
-        patientId: p.id, patientName: p.name, patientPhone: p.phone, patientEmail: p.email,
+        patientId: p.id, patientName: p.name, patientPhone: p.phone, patientDni: p.dni, patientEmail: p.email,
         doctorId: doctor.id, doctorName: `Dr/a. ${doctor.firstName} ${doctor.lastName}`,
         specialtyId: doctor.specialtyIds[0], specialtyName: specialties.find(s=>s.id===doctor.specialtyIds[0]).name,
         branchId, branchName: branches.find(b=>b.id===branchId).name,
@@ -325,9 +415,9 @@ async function handleSeed(req) {
     appointments: sample.length,
   }, credentials: {
     admin: 'admin@clinicabuenasalud.com / Admin@2025!',
-    reception: 'recepcion@clinicabuenasalud.com / Recepcion@2025!',
+    reception: 'DNI 30111222 / Recepcion@2025!',
     doctor: 'dr.rossi@clinicabuenasalud.com / Doctor@2025!',
-    patient: 'paciente@ejemplo.com / Paciente@2025!',
+    patient: 'DNI 35678910 / Paciente@2025!',
   }})
 }
 
@@ -340,10 +430,21 @@ async function handleLogin(req) {
   try { body = LoginSchema.parse(await req.json()) } catch (e) { return badZod(e) }
   const { email, password, totp } = body
   const db = await getDb()
-  const user = await db.collection('users').findOne({ email: email.toLowerCase().trim() })
+  const user = body.dni
+    ? await findUserByDni(db, body.dni)
+    : await db.collection('users').findOne({ email: String(email).toLowerCase().trim() })
   if (!user) {
-    await audit(db, req, { action: 'LOGIN_FAIL', entity: 'auth', newValues: { email } })
+    await audit(db, req, { action: 'LOGIN_FAIL', entity: 'auth', newValues: { method: body.dni ? 'dni' : 'email' } })
     return err('Credenciales inválidas', 401)
+  }
+  // Pacientes y recepción se identifican por DNI. El email queda solo para
+  // admin/médicos, que además tienen 2FA obligatorio.
+  if (!body.dni && ['patient', 'reception'].includes(user.role)) {
+    await audit(db, req, { action: 'LOGIN_FAIL', entity: 'auth', newValues: { method: 'email', reason: 'role_requires_dni' } })
+    return err('Pacientes y recepción deben ingresar con su DNI', 400)
+  }
+  if (!user.password) {
+    return err('Este DNI ya tiene una solicitud registrada. Creá tu cuenta con el mismo DNI para ingresar y ver tu historial.', 403, { needsRegistration: true })
   }
   if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
     return err('Cuenta bloqueada temporalmente. Intente más tarde.', 423)
@@ -389,19 +490,69 @@ async function handleRegister(req) {
     return err('La contraseña debe tener al menos 10 caracteres, una mayúscula, un número y un símbolo', 400)
   }
   const db = await getDb()
-  const email = body.email.toLowerCase().trim()
-  const exists = await db.collection('users').findOne({ email })
-  if (exists) return err('Ya existe una cuenta con ese email', 409)
-  const user = {
-    id: uuidv4(), email, password: await hashPassword(body.password),
-    name: body.name.trim(), role: 'patient', phone: encrypt(body.phone || ''),
-    twoFactorEnabled: false, failedLoginCount: 0, createdAt: new Date(),
+  const dni = normalizeDni(body.dni)
+  const email = body.email ? body.email.toLowerCase().trim() : ''
+
+  // El DNI es la clave única del paciente. Si ya existe un registro sin cuenta
+  // (por ejemplo, creado desde una solicitud de WhatsApp), se "reclama" y
+  // conserva todo el historial de turnos.
+  const existing = await findUserByDni(db, dni)
+  if (existing?.password) return err('Ya existe una cuenta con ese DNI', 409)
+
+  if (email) {
+    const emailOwner = await db.collection('users').findOne({ email })
+    if (emailOwner && emailOwner.id !== existing?.id) return err('Ya existe una cuenta con ese email', 409)
   }
-  await db.collection('users').insertOne(user)
-  await audit(db, req, { userId: user.id, action: 'REGISTER', entity: 'auth', newValues: { email } })
+
+  const password = await hashPassword(body.password)
+  const phone = body.phone ? encrypt(body.phone) : (existing?.phone || encrypt(''))
+  let user
+
+  if (existing) {
+    const update = {
+      name: body.name.trim(),
+      password,
+      phone,
+      dni: existing.dni || encrypt(dni),
+      dniHash: hashDni(dni),
+      hasAccount: true,
+      twoFactorEnabled: !!existing.twoFactorEnabled,
+      failedLoginCount: 0,
+      lockedUntil: null,
+      registeredAt: new Date(),
+    }
+    if (email && !existing.email) update.email = email
+    await db.collection('users').updateOne({ id: existing.id }, { $set: update })
+    user = { ...existing, ...update }
+  } else {
+    user = {
+      id: uuidv4(),
+      name: body.name.trim(),
+      password,
+      role: 'patient',
+      phone,
+      dni: encrypt(dni),
+      dniHash: hashDni(dni),
+      hasAccount: true,
+      createdFrom: 'web',
+      twoFactorEnabled: false,
+      failedLoginCount: 0,
+      createdAt: new Date(),
+    }
+    if (email) user.email = email
+    await db.collection('users').insertOne(user)
+  }
+
+  await audit(db, req, {
+    userId: user.id,
+    action: existing ? 'CLAIM_PATIENT_ACCOUNT' : 'REGISTER',
+    entity: 'auth',
+    newValues: { method: 'dni', claimedHistory: !!existing },
+  })
   const token = signToken({ uid: user.id, role: user.role, mfa: false })
-  const { password: _p, ...safe } = user
-  return ok({ token, user: safe }, 201)
+  const { password: _p, twoFactorSecret, recoveryCodes, pending2FASecret, ...safe } = user
+  safe.twoFactorEnabled = !!user.twoFactorEnabled
+  return ok({ token, user: decryptFields(safe, SENSITIVE_USER), claimedHistory: !!existing }, 201)
 }
 
 async function handle2FASetup(req) {
@@ -413,7 +564,7 @@ async function handle2FASetup(req) {
   const user = await db.collection('users').findOne({ id: payload.uid })
   if (!user) return err('Usuario no encontrado', 404)
   const secret = generateTotpSecret()
-  const uri = totpUri(secret, user.email)
+  const uri = totpUri(secret, user.email || user.name || 'paciente')
   const qr = await QRCode.toDataURL(uri)
   await db.collection('users').updateOne({ id: user.id }, { $set: { pending2FASecret: secret } })
   return ok({ secret, uri, qr })
@@ -499,11 +650,26 @@ async function handleCreateAppointment(req) {
   try { body = AppointmentSchema.parse(await req.json()) } catch (e) { return badZod(e) }
   if (!(await verifyCaptcha(body.captchaToken))) return err('Verificación CAPTCHA inválida', 403)
 
+  const db = await getDb()
+
   // Un paciente solo puede reservar turnos a su propio nombre (evita suplantación)
   if (user.role === 'patient') {
     body.patientId = user.id
-    body.patientEmail = user.email
+    body.patientEmail = user.email || ''
     body.patientName = user.name
+    const ownDni = normalizeDni(decrypt(user.dni))
+    if (ownDni) {
+      body.patientDni = ownDni
+    } else if (body.patientDni) {
+      // Completa el DNI de una cuenta vieja creada solo con email.
+      const owner = await findUserByDni(db, body.patientDni)
+      if (owner && owner.id !== user.id) return err('Ese DNI ya está asociado a otra cuenta', 409)
+      await db.collection('users').updateOne({ id: user.id }, { $set: {
+        dni: encrypt(normalizeDni(body.patientDni)), dniHash: hashDni(body.patientDni),
+      } })
+    } else {
+      return err('Necesitamos tu DNI para asociar el turno a tu historial clínico', 400)
+    }
   }
 
   const nowMsUtc = nowMs()
@@ -512,7 +678,6 @@ async function handleCreateAppointment(req) {
     return err('Los turnos requieren al menos 2 horas de anticipación', 400)
   }
 
-  const db = await getDb()
   const startM = timeToMinutes(body.startTime), endM = timeToMinutes(body.endTime)
   if (endM <= startM) return err('Horario inválido', 400)
   const existing = await db.collection('appointments').find({ doctorId: body.doctorId, date: body.date, status: { $nin: ['cancelled','no_show'] } }).toArray()
@@ -529,15 +694,25 @@ async function handleCreateAppointment(req) {
   let office = body.officeId ? await db.collection('offices').findOne({ id: body.officeId }) : null
   if (!office) office = await db.collection('offices').findOne({ branchId: body.branchId })
 
-  // patient resolution
+  // Resolución del paciente: DNI como identidad principal.
   let patient = null
   if (body.patientId) patient = await db.collection('users').findOne({ id: body.patientId })
+  if (!patient && body.patientDni) {
+    patient = await findOrCreatePatientByDni(db, {
+      dni: body.patientDni,
+      name: body.patientName,
+      phone: body.patientPhone,
+      email: body.patientEmail || '',
+      origin: user.role === 'patient' ? 'web' : 'reception',
+    })
+  }
   if (!patient && body.patientEmail) {
     patient = await db.collection('users').findOne({ email: body.patientEmail.toLowerCase() })
     if (!patient) {
       patient = {
         id: uuidv4(), email: body.patientEmail.toLowerCase(),
-        password: await hashPassword(uuidv4()), name: body.patientName || body.patientEmail,
+        password: null, hasAccount: false, createdFrom: 'appointment',
+        name: body.patientName || body.patientEmail,
         role: 'patient', phone: encrypt(body.patientPhone || ''),
         twoFactorEnabled: false, failedLoginCount: 0, createdAt: new Date(),
       }
@@ -545,11 +720,14 @@ async function handleCreateAppointment(req) {
     }
   }
 
+  const patientDni = normalizeDni(body.patientDni || decrypt(patient?.dni))
+
   const doc = {
     id: uuidv4(),
     patientId: patient?.id || body.patientId || null,
     patientName: patient?.name || body.patientName || 'Invitado',
     patientPhone: encrypt(body.patientPhone || (patient?.phone ? decrypt(patient.phone) : '')),
+    patientDni: patientDni ? encrypt(patientDni) : '',
     patientEmail: patient?.email || body.patientEmail || '',
     doctorId: body.doctorId,
     doctorName: doctor ? `Dr/a. ${doctor.firstName} ${doctor.lastName}` : '',
@@ -658,10 +836,24 @@ async function handleCreateWhatsAppRequest(req) {
     ? await db.collection('branches').findOne({ id: body.branchId })
     : null
 
+  // El DNI identifica al paciente: si ya existe se reutiliza su ficha e
+  // historial; si no, se crea una ficha sin cuenta para que luego la reclame.
+  const dni = normalizeDni(body.dni)
+  const patient = await findOrCreatePatientByDni(db, {
+    dni,
+    name: body.name,
+    phone: body.phone,
+    origin: 'whatsapp',
+  })
+
   const doc = {
     id: uuidv4(),
-    name: body.name,
-    dni: encrypt(body.dni || ''),
+    patientId: patient?.id || null,
+    name: patient?.name || body.name,
+    patientName: patient?.name || body.name,
+    patientHasAccount: !!patient?.password,
+    dni: encrypt(dni),
+    dniHash: hashDni(dni),
     phone: encrypt(body.phone || ''),
     specialtyId: specialty?.id || '',
     specialtyName: specialty?.name || '',
@@ -694,7 +886,12 @@ async function handleCreateWhatsAppRequest(req) {
   })
 
   return ok({
-    request: { id: doc.id, status: doc.status, createdAt: doc.createdAt },
+    request: { id: doc.id, status: doc.status, createdAt: doc.createdAt, patientId: doc.patientId },
+    patient: {
+      id: patient?.id || null,
+      name: patient?.name || body.name,
+      hasAccount: !!patient?.password,
+    },
     waUrl: buildWaUrl(WHATSAPP_NUMBER, message),
     message,
   }, 201)
@@ -707,14 +904,22 @@ async function handleListWhatsAppRequests(req) {
   const status = url.searchParams.get('status')
   const filter = ['new', 'contacted', 'closed'].includes(status) ? { status } : {}
   const rows = await db.collection('whatsapp_requests').find(filter).sort({ createdAt: -1 }).limit(200).toArray()
+  // El estado de la cuenta se calcula al leer: una solicitud creada antes del
+  // registro debe dejar de mostrar "cuenta pendiente" apenas el paciente reclama su DNI.
+  const patientIds = [...new Set(rows.map(r => r.patientId).filter(Boolean))]
+  const patients = patientIds.length
+    ? await db.collection('users').find({ id: { $in: patientIds } }).toArray()
+    : []
+  const patientById = new Map(patients.map(p => [p.id, p]))
   return ok({
-    requests: rows.map(({ _id, ...r }) => ({
-      ...r,
-      dni: r.dni ? decrypt(r.dni) : '',
-      phone: r.phone ? decrypt(r.phone) : '',
-      preferred: r.preferred ? decrypt(r.preferred) : '',
-      message: r.message ? decrypt(r.message) : '',
-    })),
+    requests: rows.map(({ _id, ...r }) => {
+      const patient = patientById.get(r.patientId)
+      return decryptFields({
+        ...r,
+        patientName: patient?.name || r.patientName,
+        patientHasAccount: patient ? !!patient.password : !!r.patientHasAccount,
+      }, SENSITIVE_WA)
+    }),
   })
 }
 
@@ -736,6 +941,113 @@ async function handleUpdateWhatsAppRequest(req, { id }) {
     handledByName: u.name,
   } })
   return ok({ ok: true, status })
+}
+
+/* ================= HISTORIAL CLÍNICO ================= */
+async function handleClinicalHistory(req) {
+  const user = await currentUser(req)
+  const gate = requireRole(user, ['admin', 'reception', 'doctor', 'patient'])
+  if (gate) return gate
+
+  const { searchParams } = new URL(req.url)
+  let patientId = searchParams.get('patientId')
+  if (user.role === 'patient') patientId = user.id
+  if (!patientId) return err('patientId requerido', 400)
+
+  const db = await getDb()
+  const patient = await db.collection('users').findOne({ id: patientId })
+  if (!patient || patient.role !== 'patient') return err('Paciente no encontrado', 404)
+
+  // Un médico solo accede a pacientes de su propia agenda.
+  if (user.role === 'doctor') {
+    const related = await db.collection('appointments').findOne({ patientId, doctorId: user.doctorId })
+    if (!related) return err('Sin permisos sobre este historial', 403)
+  }
+
+  const [appointments, records, requests] = await Promise.all([
+    db.collection('appointments').find({ patientId }).sort({ date: -1, startTime: -1 }).toArray(),
+    db.collection('clinical_records').find({ patientId }).sort({ createdAt: -1 }).toArray(),
+    db.collection('whatsapp_requests').find({ patientId }).sort({ createdAt: -1 }).limit(20).toArray(),
+  ])
+
+  const safeAppointments = appointments.map(({ _id, ...a }) => decryptFields(a, SENSITIVE_APPT))
+  const safeRecords = records.map(({ _id, ...r }) => decryptFields(r, SENSITIVE_RECORD))
+  const safeRequests = requests.map(({ _id, ...r }) => decryptFields({
+    ...r,
+    patientName: patient.name,
+    patientHasAccount: !!patient.password,
+  }, SENSITIVE_WA))
+
+  const today = new Date().toISOString().slice(0, 10)
+  const attended = safeAppointments.filter(a => a.status === 'attended')
+  const upcoming = safeAppointments.filter(a =>
+    a.date >= today && !['cancelled', 'no_show', 'attended'].includes(a.status))
+
+  const { password, twoFactorSecret, recoveryCodes, pending2FASecret, ...patientSafe } = patient
+  return ok({
+    patient: decryptFields(patientSafe, SENSITIVE_USER),
+    appointments: safeAppointments,
+    records: safeRecords,
+    whatsappRequests: safeRequests,
+    summary: {
+      totalAppointments: safeAppointments.length,
+      attended: attended.length,
+      upcoming: upcoming.length,
+      clinicalRecords: safeRecords.length,
+      whatsappRequests: safeRequests.length,
+      lastVisit: attended[0]?.date || null,
+      hasAccount: !!password,
+    },
+  })
+}
+
+async function handleCreateClinicalRecord(req) {
+  const user = await currentUser(req)
+  const gate = requireRole(user, ['admin', 'doctor'])
+  if (gate) return gate
+
+  let body
+  try { body = ClinicalRecordSchema.parse(await req.json()) } catch (e) { return badZod(e) }
+
+  const db = await getDb()
+  const patient = await db.collection('users').findOne({ id: body.patientId })
+  if (!patient || patient.role !== 'patient') return err('Paciente no encontrado', 404)
+
+  let appointment = null
+  if (body.appointmentId) {
+    appointment = await db.collection('appointments').findOne({ id: body.appointmentId })
+    if (!appointment) return err('Turno no encontrado', 404)
+    if (appointment.patientId !== body.patientId) return err('El turno no pertenece al paciente', 400)
+    if (user.role === 'doctor' && appointment.doctorId !== user.doctorId) {
+      return err('Sin permisos sobre este turno', 403)
+    }
+  }
+
+  const record = {
+    id: uuidv4(),
+    patientId: body.patientId,
+    patientName: patient.name,
+    patientDniHash: patient.dniHash || null,
+    appointmentId: body.appointmentId || null,
+    doctorId: user.role === 'doctor' ? user.doctorId : (appointment?.doctorId || null),
+    doctorName: user.role === 'doctor' ? user.name : (appointment?.doctorName || user.name),
+    date: body.date || appointment?.date || new Date().toISOString().slice(0, 10),
+    reason: encrypt(body.reason || ''),
+    diagnosis: encrypt(body.diagnosis || ''),
+    treatment: encrypt(body.treatment || ''),
+    notes: encrypt(body.notes || ''),
+    createdAt: new Date(),
+    createdBy: user.id,
+  }
+  await db.collection('clinical_records').insertOne(record)
+  await audit(db, req, {
+    userId: user.id,
+    action: 'CREATE_CLINICAL_RECORD',
+    entity: 'clinical_record',
+    entityId: record.id,
+    newValues: { patientId: body.patientId, appointmentId: record.appointmentId },
+  })
+  return ok({ record: decryptFields(record, SENSITIVE_RECORD) }, 201)
 }
 
 /* ================= STATS ================= */
@@ -799,6 +1111,9 @@ async function router(req, ctx) {
     if (path === 'whatsapp-requests' && method === 'GET') return await handleListWhatsAppRequests(req)
     const waMatch = path.match(/^whatsapp-requests\/([^/]+)$/)
     if (waMatch && method === 'PATCH') return await handleUpdateWhatsAppRequest(req, { id: waMatch[1] })
+
+    if (path === 'clinical-history' && method === 'GET') return await handleClinicalHistory(req)
+    if (path === 'clinical-records' && method === 'POST') return await handleCreateClinicalRecord(req)
 
     if (path === 'stats' && method === 'GET') return await handleStats()
     if (path === 'audit' && method === 'GET') return await handleAudit(req)

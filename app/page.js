@@ -21,6 +21,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { HelpWidget } from '@/components/help-widget'
 import { WhatsAppInbox } from '@/components/whatsapp-inbox'
+import { ClinicalHistory, ClinicalHistoryDialog } from '@/components/clinical-history'
 import { api } from '@/lib/api-client'
 
 const ICONS = { Stethoscope, Sparkles, Baby, HeartPulse, Flower2, Bone, Eye, Brain }
@@ -183,41 +184,52 @@ function Landing({ onStart, onLogin }) {
 function LoginView({ onBack, onLogged }) {
   const [tab, setTab] = useState('patient')
   const [email, setEmail] = useState('')
+  const [dni, setDni] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
   const demos = {
-    admin:      { email: 'admin@clinicabuenasalud.com', password: 'Admin@2025!', label: 'Administrador (2FA obligatorio)' },
-    reception:  { email: 'recepcion@clinicabuenasalud.com', password: 'Recepcion@2025!', label: 'Recepción' },
-    doctor:     { email: 'dr.rossi@clinicabuenasalud.com', password: 'Doctor@2025!', label: 'Médico (2FA obligatorio)' },
-    patient:    { email: 'paciente@ejemplo.com', password: 'Paciente@2025!', label: 'Paciente' },
+    patient:    { type: 'dni',   value: '35678910', password: 'Paciente@2025!', label: 'Paciente — DNI 35678910' },
+    doctor:     { type: 'email', value: 'dr.rossi@clinicabuenasalud.com', password: 'Doctor@2025!', label: 'Médico (2FA obligatorio)' },
+    reception:  { type: 'dni',   value: '30111222', password: 'Recepcion@2025!', label: 'Recepción — DNI 30111222' },
+    admin:      { type: 'email', value: 'admin@clinicabuenasalud.com', password: 'Admin@2025!', label: 'Administrador (2FA obligatorio)' },
   }
   const [twoFAState, setTwoFAState] = useState(null) // { setup, setupToken?, qr?, secret? }
   const [totpInput, setTotpInput] = useState('')
   const [recovery, setRecovery] = useState(null)
-  const [reg, setReg] = useState({ name: '', phone: '', captchaToken: null })
+  const [reg, setReg] = useState({ name: '', dni: '', phone: '', captchaToken: null })
 
   useEffect(() => {
     if (demos[tab]) {
-      setEmail(demos[tab].email)
+      setEmail(demos[tab].type === 'email' ? demos[tab].value : '')
+      setDni(demos[tab].type === 'dni' ? demos[tab].value : '')
       setPassword(demos[tab].password)
     } else if (tab === 'register') {
-      setEmail(''); setPassword('')
+      setEmail(''); setDni(''); setPassword('')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
+
+  function credentials() {
+    const demo = demos[tab]
+    if (demo?.type === 'dni') return { dni }
+    if (demo?.type === 'email') return { email }
+    return { dni: dni || undefined, email: email || undefined }
+  }
 
   async function submitRegister(e) {
     e?.preventDefault()
     setLoading(true)
     try {
       const res = await api('auth/register', { method: 'POST', body: JSON.stringify({
-        name: reg.name, email, password, phone: reg.phone || undefined,
+        name: reg.name, dni: reg.dni, email: email || undefined, password, phone: reg.phone || undefined,
         captchaToken: reg.captchaToken || undefined,
       }) })
       localStorage.setItem('cbs_token', res.token)
       localStorage.setItem('cbs_user', JSON.stringify(res.user))
-      toast.success(`Cuenta creada, bienvenido/a ${res.user.name}`)
+      toast.success(res.claimedHistory
+        ? `Cuenta creada. Vinculamos el historial clínico de tu DNI, ${res.user.name}`
+        : `Cuenta creada, bienvenido/a ${res.user.name}`)
       onLogged(res.user)
     } catch (e2) { toast.error(e2.message) }
     finally { setLoading(false) }
@@ -227,7 +239,7 @@ function LoginView({ onBack, onLogged }) {
     e?.preventDefault()
     setLoading(true)
     try {
-      const res = await api('auth/login', { method: 'POST', body: JSON.stringify({ email, password, totp: totpInput || undefined }) })
+      const res = await api('auth/login', { method: 'POST', body: JSON.stringify({ ...credentials(), password, totp: totpInput || undefined }) })
       if (res.require2FA && res.setup) {
         // Setup 2FA required (admin/doctor first login)
         localStorage.setItem('cbs_setup_token', res.setupToken)
@@ -255,7 +267,7 @@ function LoginView({ onBack, onLogged }) {
         localStorage.setItem('cbs_user', JSON.stringify(res.user))
         setRecovery(res.recoveryCodes)
       } else {
-        const res = await api('auth/login', { method: 'POST', body: JSON.stringify({ email, password, totp: totpInput }) })
+        const res = await api('auth/login', { method: 'POST', body: JSON.stringify({ ...credentials(), password, totp: totpInput }) })
         localStorage.setItem('cbs_token', res.token)
         localStorage.setItem('cbs_user', JSON.stringify(res.user))
         toast.success('Autenticado')
@@ -273,7 +285,7 @@ function LoginView({ onBack, onLogged }) {
         <Card className="glass shadow-luxury border-white/20">
           <CardHeader className="pb-3">
             <CardTitle className="font-display text-2xl text-navy">Ingreso al portal</CardTitle>
-            <CardDescription>Seleccione su rol y credenciales</CardDescription>
+            <CardDescription>Pacientes y recepción: DNI + contraseña. Médicos y admin: email.</CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs value={tab} onValueChange={setTab}>
@@ -287,16 +299,33 @@ function LoginView({ onBack, onLogged }) {
               {Object.keys(demos).map(k => (
                 <TabsContent key={k} value={k}>
                   <form onSubmit={submit} className="space-y-4">
-                    <div>
-                      <Label>Email</Label>
-                      <Input type="email" value={email} onChange={e => setEmail(e.target.value)} className="mt-1" required />
-                    </div>
+                    {demos[k].type === 'dni' ? (
+                      <div>
+                        <Label>DNI</Label>
+                        <Input
+                          value={dni}
+                          onChange={e => setDni(e.target.value)}
+                          inputMode="numeric"
+                          autoComplete="username"
+                          placeholder="Ej: 35678910"
+                          maxLength={20}
+                          className="mt-1"
+                          required
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <Label>Email</Label>
+                        <Input type="email" value={email} onChange={e => setEmail(e.target.value)} className="mt-1" required />
+                      </div>
+                    )}
                     <div>
                       <Label>Contraseña</Label>
-                      <Input type="password" value={password} onChange={e => setPassword(e.target.value)} className="mt-1" required />
+                      <Input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" className="mt-1" required />
                     </div>
                     <div className="rounded-lg bg-muted/50 border border-border/60 p-3 text-xs text-muted-foreground">
                       Demo pre-cargado: <span className="font-medium text-navy">{demos[k].label}</span>
+                      <div className="mt-1">Pacientes y recepción ingresan con DNI + contraseña.</div>
                     </div>
                     <Button type="submit" disabled={loading} className="w-full bg-emerald-deep hover:bg-emerald-deep/90 text-primary-foreground">
                       {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Ingresar'}
@@ -311,12 +340,27 @@ function LoginView({ onBack, onLogged }) {
                     <Input value={reg.name} onChange={e => setReg(r => ({ ...r, name: e.target.value }))} className="mt-1" required />
                   </div>
                   <div>
-                    <Label>Email</Label>
-                    <Input type="email" value={email} onChange={e => setEmail(e.target.value)} className="mt-1" required />
+                    <Label>DNI</Label>
+                    <Input
+                      value={reg.dni}
+                      onChange={e => setReg(r => ({ ...r, dni: e.target.value }))}
+                      inputMode="numeric"
+                      placeholder="Ej: 35678910"
+                      maxLength={20}
+                      className="mt-1"
+                      required
+                    />
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Es tu usuario único. Si ya pediste un turno por WhatsApp con este DNI, tu historial clínico se vincula automáticamente.
+                    </div>
+                  </div>
+                  <div>
+                    <Label>Email (opcional)</Label>
+                    <Input type="email" value={email} onChange={e => setEmail(e.target.value)} className="mt-1" />
                   </div>
                   <div>
                     <Label>Contraseña</Label>
-                    <Input type="password" value={password} onChange={e => setPassword(e.target.value)} className="mt-1" required />
+                    <Input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" className="mt-1" required />
                     <div className="text-xs text-muted-foreground mt-1">Mínimo 10 caracteres, con mayúscula, número y símbolo.</div>
                   </div>
                   <div>
@@ -404,7 +448,7 @@ function BookingWizard({ user, onDone, initialSpecialtyId = null }) {
   const [slot, setSlot] = useState(null)
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [form, setForm] = useState({ name: user?.name || '', email: user?.email || '', phone: user?.phone || '', notes: '' })
+  const [form, setForm] = useState({ name: user?.name || '', email: user?.email || '', dni: user?.dni || '', phone: user?.phone || '', notes: '' })
   const [captchaToken, setCaptchaToken] = useState(null)
   const [confirmedAppt, setConfirmedAppt] = useState(null)
 
@@ -435,7 +479,8 @@ function BookingWizard({ user, onDone, initialSpecialtyId = null }) {
     try {
       const body = {
         patientId: user?.id || null,
-        patientName: form.name, patientEmail: form.email, patientPhone: form.phone,
+        patientName: form.name, patientEmail: form.email || '', patientPhone: form.phone,
+        patientDni: form.dni,
         doctorId: doctor.id, specialtyId, branchId,
         date, startTime: slot.startTime, endTime: slot.endTime, notes: form.notes,
         captchaToken: captchaToken || undefined,
@@ -588,7 +633,23 @@ function BookingWizard({ user, onDone, initialSpecialtyId = null }) {
               <CardContent className="p-6 grid md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <div><Label>Nombre completo</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="mt-1" /></div>
-                  <div><Label>Email</Label><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="mt-1" /></div>
+                  <div>
+                    <Label>DNI</Label>
+                    <Input
+                      value={form.dni}
+                      onChange={e => setForm(f => ({ ...f, dni: e.target.value }))}
+                      inputMode="numeric"
+                      placeholder="Ej: 35678910"
+                      maxLength={20}
+                      readOnly={user?.role === 'patient' && !!user?.dni}
+                      className="mt-1"
+                      required
+                    />
+                    <div className="text-xs text-muted-foreground mt-1">
+                      El turno y el historial clínico quedan asociados a este DNI.
+                    </div>
+                  </div>
+                  <div><Label>Email (opcional)</Label><Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="mt-1" /></div>
                   <div><Label>Teléfono</Label><Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="mt-1" /></div>
                   <div><Label>Notas para el médico (opcional)</Label><Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="mt-1" rows={3} /></div>
                 </div>
@@ -655,6 +716,7 @@ function AgendaCalendar() {
   const [filters, setFilters] = useState({ doctorId: '', specialtyId: '', branchId: '', status: '' })
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState(null)
+  const [historyFor, setHistoryFor] = useState(null)
 
   const days = useMemo(() => Array.from({ length: 7 }).map((_, i) => {
     const d = new Date(weekStart); d.setDate(d.getDate() + i); return d
@@ -772,12 +834,18 @@ function AgendaCalendar() {
                 <Row icon={User} label="Médico" value={selected.doctorName} />
                 <Row icon={Sparkles} label="Especialidad" value={selected.specialtyName} />
                 <Row icon={Building2} label="Sede" value={`${selected.branchName} • ${selected.officeName}`} />
+                <Row icon={User} label="DNI" value={selected.patientDni || 'N/A'} />
                 <Row icon={Phone} label="Teléfono" value={selected.patientPhone || 'N/A'} />
                 <Row icon={Mail} label="Email" value={selected.patientEmail || 'N/A'} />
                 {selected.notes && <Row icon={ClipboardList} label="Notas" value={selected.notes} />}
                 <div className="pt-2"><Badge className={`border ${STATUS_COLOR[selected.status] || ''}`}>{STATUS_LABEL[selected.status]}</Badge></div>
               </div>
               <DialogFooter className="flex-wrap gap-2">
+                {selected.patientId && (
+                  <Button size="sm" variant="outline" onClick={() => { setHistoryFor(selected); setSelected(null) }}>
+                    <ClipboardList className="mr-1 h-3.5 w-3.5" /> Historial
+                  </Button>
+                )}
                 {selected.status === 'pending' && <Button size="sm" className="bg-emerald-deep hover:bg-emerald-deep/90" onClick={() => updateStatus(selected.id, 'confirmed')}>Confirmar</Button>}
                 {['pending','confirmed'].includes(selected.status) && <Button size="sm" variant="outline" onClick={() => updateStatus(selected.id, 'in_room')}>Marcar en sala</Button>}
                 {selected.status !== 'attended' && <Button size="sm" variant="outline" onClick={() => updateStatus(selected.id, 'attended')}>Atendido</Button>}
@@ -787,6 +855,12 @@ function AgendaCalendar() {
           )}
         </DialogContent>
       </Dialog>
+      <ClinicalHistoryDialog
+        open={!!historyFor}
+        onOpenChange={o => !o && setHistoryFor(null)}
+        patientId={historyFor?.patientId}
+        appointmentId={historyFor?.id}
+      />
     </div>
   )
 }
@@ -796,6 +870,7 @@ function DoctorAgenda({ user }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState(null)
+  const [historyFor, setHistoryFor] = useState(null)
 
   async function reload() {
     if (!user?.doctorId) return
@@ -856,12 +931,18 @@ function DoctorAgenda({ user }) {
               <DialogHeader><DialogTitle className="font-display text-2xl">{selected.patientName}</DialogTitle>
                 <DialogDescription>{selected.date} • {selected.startTime}</DialogDescription></DialogHeader>
               <div className="space-y-2 text-sm">
+                <Row icon={User} label="DNI" value={selected.patientDni || 'N/A'} />
                 <Row icon={Phone} label="Teléfono" value={selected.patientPhone || 'N/A'} />
                 <Row icon={Mail} label="Email" value={selected.patientEmail || 'N/A'} />
                 <Row icon={Building2} label="Sede" value={`${selected.branchName} • ${selected.officeName}`} />
                 {selected.notes && <Row icon={ClipboardList} label="Notas" value={selected.notes} />}
               </div>
               <DialogFooter className="flex-wrap gap-2">
+                {selected.patientId && (
+                  <Button size="sm" variant="outline" onClick={() => { setHistoryFor(selected); setSelected(null) }}>
+                    <ClipboardList className="mr-1 h-3.5 w-3.5" /> Historial clínico
+                  </Button>
+                )}
                 {selected.status === 'pending' && <Button size="sm" className="bg-emerald-deep" onClick={() => updateStatus(selected.id, 'confirmed')}>Confirmar</Button>}
                 {['pending','confirmed'].includes(selected.status) && <Button size="sm" variant="outline" onClick={() => updateStatus(selected.id, 'in_room')}>En sala</Button>}
                 <Button size="sm" variant="outline" onClick={() => updateStatus(selected.id, 'attended')}>Atendido</Button>
@@ -871,6 +952,13 @@ function DoctorAgenda({ user }) {
           )}
         </DialogContent>
       </Dialog>
+      <ClinicalHistoryDialog
+        open={!!historyFor}
+        onOpenChange={o => !o && setHistoryFor(null)}
+        patientId={historyFor?.patientId}
+        appointmentId={historyFor?.id}
+        canAdd
+      />
     </div>
   )
 }
@@ -891,7 +979,7 @@ function ApptRow({ a, muted }) {
   )
 }
 
-function MyAppointments({ user, onBook }) {
+function MyAppointments({ user, onBook, onHistory }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   useEffect(() => {
@@ -904,7 +992,10 @@ function MyAppointments({ user, onBook }) {
     <div className="max-w-4xl mx-auto px-6 py-10">
       <div className="flex items-center justify-between mb-6">
         <div><h1 className="font-display text-3xl text-navy">Mis turnos</h1><p className="text-muted-foreground text-sm">Hola, {user.name}</p></div>
-        <Button onClick={onBook} className="bg-gold hover:bg-gold/90 text-navy font-semibold"><PlusCircle className="w-4 h-4 mr-2" />Reservar turno</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={onHistory}><ClipboardList className="w-4 h-4 mr-2" />Historial clínico</Button>
+          <Button onClick={onBook} className="bg-gold hover:bg-gold/90 text-navy font-semibold"><PlusCircle className="w-4 h-4 mr-2" />Reservar turno</Button>
+        </div>
       </div>
       <div className="mb-8">
         <div className="text-xs tracking-widest uppercase text-gold mb-3">Próximos</div>
@@ -978,7 +1069,7 @@ function AppShell({ user, view, setView, onLogout, children }) {
     admin:     [['agenda','Agenda'], ['stats','Dashboard'], ['inbox','Solicitudes']],
     reception: [['agenda','Agenda'], ['inbox','Solicitudes']],
     doctor:    [['doctor','Mi agenda']],
-    patient:   [['my','Mis turnos'], ['book','Reservar']],
+    patient:   [['my','Mis turnos'], ['history','Historial clínico'], ['book','Reservar']],
   }[user.role] || []
   const roleLabels = { admin: 'Administrador', reception: 'Recepción', doctor: 'Médico', patient: 'Paciente' }
   const RoleIcon = { admin: Shield, reception: UserCog, doctor: Stethoscope, patient: User }[user.role] || User
@@ -1079,7 +1170,19 @@ function App() {
         {view === 'stats' && <AdminStats />}
         {view === 'inbox' && <WhatsAppInbox />}
         {view === 'doctor' && <DoctorAgenda user={user} />}
-        {view === 'my' && <MyAppointments user={user} onBook={() => { setBookSpecialtyId(null); setView('book') }} />}
+        {view === 'my' && <MyAppointments user={user} onBook={() => { setBookSpecialtyId(null); setView('book') }} onHistory={() => setView('history')} />}
+        {view === 'history' && (
+          <div className="max-w-4xl mx-auto px-6 py-10">
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h1 className="font-display text-3xl text-navy">Historial clínico</h1>
+                <p className="text-muted-foreground text-sm">Tus turnos, solicitudes y evoluciones asociadas a tu DNI.</p>
+              </div>
+              <Button variant="outline" onClick={() => setView('my')}>Volver a mis turnos</Button>
+            </div>
+            <ClinicalHistory />
+          </div>
+        )}
         {view === 'book' && (
           <BookingWizard
             key={bookSpecialtyId || 'general'}
