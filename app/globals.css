@@ -111,6 +111,37 @@
   .no-scrollbar::-webkit-scrollbar { display: none; }
 }
 
+/* ---------------------------------------------------------------------------
+   Netlify inyecta su badge en los deploys. Lo movemos abajo a la izquierda
+   para que nunca se superponga con el botón "Ayuda" (abajo a la derecha) ni
+   con su panel. También cubre el drawer de Netlify en caso de estar activo.
+--------------------------------------------------------------------------- */
+#netlify-badge,
+#netlify-drawer,
+.netlify-badge,
+netlify-drawer,
+a[href*="netlify.com"][id*="badge" i],
+iframe[src*="netlify"][id*="badge" i] {
+  left: 16px !important;
+  right: auto !important;
+  bottom: 16px !important;
+  top: auto !important;
+  z-index: 30 !important;
+  max-width: calc(100vw - 96px) !important;
+}
+
+@media (max-width: 640px) {
+  #netlify-badge,
+  .netlify-badge,
+  a[href*="netlify.com"][id*="badge" i],
+  iframe[src*="netlify"][id*="badge" i] {
+    bottom: 12px !important;
+    left: 12px !important;
+    transform: scale(0.85);
+    transform-origin: bottom left;
+  }
+}
+
 @keyframes shimmer {
   0% { background-position: -1000px 0; }
   100% { background-position: 1000px 0; }
