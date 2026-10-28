@@ -165,6 +165,18 @@ La ruta publica `POST /api/whatsapp-requests` tiene un limite de 5 solicitudes c
 
 El numero configurado en `.env.local` (`NEXT_PUBLIC_WHATSAPP_NUMBER`) es el que recibe los mensajes del centro de ayuda y de la bandeja. Si lo cambias, reinicia el servidor para que Next.js vuelva a compilar el valor publico. `NEXT_PUBLIC_CLINIC_PHONE` controla el telefono que muestra el boton **Llamar**.
 
+## Manual de uso
+
+El manual completo del sitio (de la portada a la administracion, con capturas reales) esta en:
+
+| Formato | Archivo |
+| --- | --- |
+| Markdown (fuente) | `docs/Manual_de_Uso_Clinica_Buena_Salud.md` |
+| HTML con estilos | `docs/Manual_de_Uso_Clinica_Buena_Salud.html` |
+| PDF para imprimir o compartir | `docs/Manual_de_Uso_Clinica_Buena_Salud.pdf` |
+
+Las 33 capturas viven en `docs/manual/img/` y estan numeradas en el mismo orden que las figuras del manual. Cubre el sitio publico, el centro de ayuda y la solicitud por WhatsApp, el ingreso por DNI, el registro y el 2FA, el portal del paciente, la recepcion (agenda, bandeja y reserva desde WhatsApp), el medico (agenda e historia clinica), el administrador, los flujos completos, el uso movil, las credenciales demo (sin contrasenas), la solucion de problemas y los anexos.
+
 ## Pruebas automatizadas
 
 Con la web levantada (`http://localhost:3000`) y el entorno de Python con `requests` instalado:

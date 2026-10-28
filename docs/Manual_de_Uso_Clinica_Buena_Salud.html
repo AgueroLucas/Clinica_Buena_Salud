@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual de uso — Clínica Buena Salud</title>
+<style>
+:root { --navy: #102b46; --emerald: #0f5132; --gold: #b8912f; --ink: #243447; --muted: #5b6b7c; --line: #d7dee6; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; background: #fff; color: var(--ink); font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; line-height: 1.55; }
+main { max-width: 980px; margin: 0 auto; padding: 28px 32px 64px; }
+h1, h2, h3, h4 { color: var(--navy); line-height: 1.2; }
+h1.doc-title { font-size: 2.5rem; margin: 0 0 1rem; padding-bottom: 1rem; border-bottom: 5px solid var(--gold); letter-spacing: -0.02em; }
+h2 { font-size: 1.55rem; margin: 2.2rem 0 0.8rem; padding-bottom: 0.35rem; border-bottom: 2px solid #e7ecf1; }
+h3 { font-size: 1.16rem; color: var(--emerald); margin: 1.5rem 0 0.6rem; }
+p, li { font-size: 10.5pt; }
+p { margin: 0.65rem 0; }
+ul, ol { margin: 0.65rem 0 0.9rem; padding-left: 1.45rem; }
+li { margin: 0.22rem 0; }
+li.task { list-style: none; margin-left: -1.15rem; }
+.checkbox { display: inline-block; width: 1.15em; color: var(--emerald); font-weight: 700; }
+a { color: #0b5f8a; text-decoration: none; }
+hr { border: 0; border-top: 1px solid var(--line); margin: 1.6rem 0; }
+table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.4rem; font-size: 9pt; page-break-inside: avoid; }
+th { background: var(--navy); color: #fff; text-align: left; padding: 7px 8px; border: 1px solid var(--navy); }
+td { border: 1px solid var(--line); padding: 6px 8px; vertical-align: top; }
+tbody tr:nth-child(even) td { background: #f7f9fb; }
+blockquote { margin: 1rem 0; padding: 0.7rem 1rem; border-left: 4px solid var(--gold); background: #fbf7ea; page-break-inside: avoid; }
+blockquote p { margin: 0.25rem 0; }
+code { background: #eef2f6; padding: 1px 4px; border-radius: 3px; font-family: Consolas, "Courier New", monospace; font-size: 0.9em; }
+pre { background: var(--navy); color: #f8fafc; padding: 0.9rem 1rem; border-radius: 6px; overflow: auto; page-break-inside: avoid; }
+pre code { background: none; color: inherit; padding: 0; }
+figure { margin: 1.2rem 0 1.7rem; page-break-inside: avoid; }
+figure img { display: block; width: 100%; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 2px 9px rgba(16, 43, 70, 0.12); }
+figcaption { margin-top: 0.45rem; color: var(--muted); font-size: 9pt; }
+@page { size: A4; margin: 16mm 15mm 18mm; }
+@media print {
+  main { max-width: none; padding: 0; }
+  h2 { page-break-before: always; }
+  h3, h4 { page-break-after: avoid; }
+  a { color: inherit; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1 class="doc-title">Manual de uso — Clínica Buena Salud</h1>
+<p><strong>Sitio web de turnos, historial clínico y gestión de solicitudes</strong></p>
+<table>
+<thead><tr><th>Dato</th><th>Valor</th></tr></thead>
+<tbody>
+<tr><td>Versión del manual</td><td>1.0</td></tr>
+<tr><td>Fecha</td><td>28/10/2026</td></tr>
+<tr><td>Aplicación</td><td>Clínica Buena Salud (Next.js + PostgreSQL)</td></tr>
+<tr><td>Público destinatario</td><td>Pacientes, recepción, médicos, administración y soporte</td></tr>
+<tr><td>Alcance</td><td>Sitio público, centro de ayuda, acceso, portal del paciente, recepción, médico, administrador y uso móvil</td></tr>
+</tbody>
+</table>
+
+<blockquote><p>Este manual describe la aplicación tal como está implementada en esta versión. Las pantallas fueron capturadas con datos de demostración; los nombres, fechas y turnos que aparecen son ficticios.</p></blockquote>
+<hr>
+<h2>Índice</h2>
+<ol>
+<li><a href="#sec1">Introducción</a></li>
+<li><a href="#sec2">Primer contacto con el sitio</a></li>
+<li><a href="#sec3">Centro de ayuda y solicitud por WhatsApp</a></li>
+<li><a href="#sec4">Ingreso, registro y doble factor (2FA)</a></li>
+<li><a href="#sec5">Portal del paciente</a></li>
+<li><a href="#sec6">Recepción</a></li>
+<li><a href="#sec7">Médico</a></li>
+<li><a href="#sec8">Administrador</a></li>
+<li><a href="#sec9">Flujos de trabajo completos</a></li>
+<li><a href="#sec10">Uso en móvil y accesibilidad</a></li>
+<li><a href="#sec11">Credenciales demo y datos de ejemplo</a></li>
+<li><a href="#sec12">Solución de problemas</a></li>
+<li><a href="#sec13">Seguridad, privacidad y buenas prácticas</a></li>
+<li><a href="#sec14">Glosario</a></li>
+<li><a href="#sec15">Anexos</a></li>
+<li><a href="#sec16">Control de versiones</a></li>
+</ol>
+<hr>
+<a id="sec1"></a>
+<h2>1. Introducción</h2>
+<h3>1.1 Para qué sirve este manual</h3>
+<p>Este manual explica, paso a paso, cómo usar todas las pantallas de <strong>Clínica Buena Salud</strong>: desde la página pública y el centro de ayuda hasta la reserva de turnos, el historial clínico y la gestión diaria de recepción, médicos y administración.</p>
+<p>Está pensado para cuatro situaciones:</p>
+<ul>
+<li><strong>Pacientes</strong> que reservan un turno, crean su cuenta o consultan su historial.</li>
+<li><strong>Recepción</strong> que atiende solicitudes de WhatsApp, reserva turnos y actualiza la agenda.</li>
+<li><strong>Médicos</strong> que ven su agenda y registran evoluciones clínicas.</li>
+<li><strong>Administración y soporte</strong> que supervisan la agenda, las métricas y las solicitudes.</li>
+</ul>
+<h3>1.2 Alcance funcional</h3>
+<p>La aplicación cubre el circuito completo:</p>
+<ol>
+<li>Un visitante conoce el sitio y las especialidades.</li>
+<li>Puede pedir un turno por WhatsApp <strong>sin crear cuenta</strong> o reservar online <strong>con cuenta</strong>.</li>
+<li>Recepción recibe la solicitud, contacta al paciente y puede reservar el turno desde la misma bandeja.</li>
+<li>El paciente puede crear su cuenta con el mismo DNI y <strong>recuperar automáticamente</strong> su historial.</li>
+<li>El médico atiende el turno y registra una <strong>evolución clínica</strong>.</li>
+<li>El paciente ve sus turnos, solicitudes y evoluciones en su <strong>historial clínico</strong>.</li>
+<li>Administración consulta la agenda, las solicitudes y los indicadores del dashboard.</li>
+</ol>
+<h3>1.3 Perfiles y permisos</h3>
+<table>
+<thead><tr><th>Perfil</th><th>Cómo ingresa</th><th>Qué puede hacer</th><th>Qué no puede hacer</th></tr></thead>
+<tbody>
+<tr><td><strong>Visitante</strong></td><td>Sin cuenta</td><td>Ver el sitio, el centro de ayuda, pedir turno por WhatsApp y crear una cuenta</td><td>Reservar online sin cuenta; ver historiales</td></tr>
+<tr><td><strong>Paciente</strong></td><td>DNI + contraseña</td><td>Ver sus turnos, su historial, reservar online y pedir turno por WhatsApp</td><td>Ver datos de otros pacientes; gestionar la agenda</td></tr>
+<tr><td><strong>Recepción</strong></td><td>DNI + contraseña</td><td>Agenda semanal, reserva manual, reserva desde solicitudes, historial de pacientes y cambios de estado</td><td>Administrar métricas globales; configurar el sistema</td></tr>
+<tr><td><strong>Médico</strong></td><td>Email + contraseña + 2FA</td><td>Ver su agenda diaria, consultar el historial de sus pacientes y agregar evoluciones</td><td>Ver pacientes ajenos a su agenda; cancelar turnos</td></tr>
+<tr><td><strong>Administrador</strong></td><td>Email + contraseña + 2FA</td><td>Agenda completa, dashboard de métricas, bandeja de solicitudes, reserva desde solicitudes e historiales</td><td>Nada propio del alcance administrativo; el sistema aplica las mismas reglas de negocio</td></tr>
+</tbody>
+</table>
+
+<blockquote><p><strong>Importante:</strong> el DNI es la identidad principal del paciente. Pacientes y recepción <strong>no</strong> ingresan con email. Médicos y administradores <strong>sí</strong> usan email y tienen 2FA obligatorio.</p></blockquote>
+<h3>1.4 Cómo leer este manual</h3>
+<ul>
+<li>Los textos entre comillas y en <strong>negrita</strong> son botones, títulos o etiquetas que se ven en pantalla.</li>
+<li>Las rutas de archivos se muestran como <code>docs/manual/img/...</code>.</li>
+<li>Las notas con fondo de cita (<code>&gt;</code>) contienen advertencias, atajos o aclaraciones.</li>
+<li>Cada sección indica el perfil al que está dirigida.</li>
+<li>Las figuras están numeradas y muestran la pantalla real de la aplicación.</li>
+</ul>
+<hr>
+<a id="sec2"></a>
+<h2>2. Primer contacto con el sitio</h2>
+<p><strong>Dirigido a:</strong> visitantes y pacientes.</p>
+<h3>2.1 Dirección y requisitos</h3>
+<p>La aplicación se abre en el navegador con la dirección que indique el equipo:</p>
+<pre><code class="language-text">http://localhost:3000</code></pre>
+<p>En producción se usa el dominio público de la clínica. Se recomienda un navegador actualizado (Chrome, Edge, Firefox o Safari) y una conexión estable. No es necesario instalar nada.</p>
+<h3>2.2 Página de inicio</h3>
+<p>Al entrar se muestra la portada institucional. La parte superior tiene la marca, el botón <strong>Ingresar</strong> y el botón <strong>Reservar turno</strong>. La portada presenta el mensaje principal, dos accesos grandes y tres beneficios destacados: <strong>40+ especialistas</strong>, <strong>3 sedes exclusivas</strong> y <strong>Turnos en 60 segundos</strong>.</p>
+<figure><img src="manual/img/01-inicio-portada.png" alt="Portada de Clínica Buena Salud"><figcaption><strong>Figura 1.</strong> Portada del sitio. Arriba a la derecha están los accesos <strong>Ingresar</strong> y <strong>Reservar turno</strong>; abajo a la derecha, el botón flotante <strong>Ayuda</strong>.</figcaption></figure>
+<p>Al desplazarse hacia abajo se ve la sección <strong>Especialidades</strong> con ocho tarjetas: Cardiología, Dermatología, Pediatría, Ginecología, Traumatología, Oftalmología, Neurología y Clínica Médica.</p>
+<figure><img src="manual/img/02-inicio-completo.png" alt="Página de inicio completa"><figcaption><strong>Figura 2.</strong> Página de inicio completa, con la sección de especialidades y el pie de página.</figcaption></figure>
+<h3>2.3 Cabecera, accesos y pie de página</h3>
+<table>
+<thead><tr><th>Elemento</th><th>Ubicación</th><th>Acción</th></tr></thead>
+<tbody>
+<tr><td><strong>Ingresar</strong></td><td>Arriba a la derecha</td><td>Abre la pantalla de ingreso al portal</td></tr>
+<tr><td><strong>Reservar turno</strong></td><td>Arriba a la derecha</td><td>Inicia la reserva; si no hay sesión, pide ingreso o registro</td></tr>
+<tr><td><strong>Reservar mi turno</strong></td><td>Dentro de la portada</td><td>Igual que <strong>Reservar turno</strong></td></tr>
+<tr><td><strong>Portal de personal</strong></td><td>Dentro de la portada</td><td>Abre el ingreso para personal de la clínica</td></tr>
+<tr><td><strong>Ayuda</strong></td><td>Abajo a la derecha</td><td>Abre el centro de ayuda</td></tr>
+<tr><td>Tarjetas de especialidad</td><td>Sección <strong>Especialidades</strong></td><td>Inician la reserva con esa especialidad preseleccionada</td></tr>
+<tr><td>Pie de página</td><td>Al final</td><td>Muestra la marca y el aviso de derechos reservados</td></tr>
+</tbody>
+</table>
+
+<blockquote><p><strong>Nota:</strong> si se elige una especialidad desde una tarjeta y todavía no hay sesión, la aplicación conserva la intención de reserva y lleva al ingreso. Después de ingresar, continúa en el asistente de reserva.</p></blockquote>
+<h3>2.4 Reserva desde una tarjeta de especialidad</h3>
+<ol>
+<li>En la portada, bajar hasta <strong>Especialidades</strong>.</li>
+<li>Hacer clic en la tarjeta de la especialidad deseada.</li>
+<li>Si ya hay una sesión de paciente, se abre el asistente en el paso de <strong>Sede</strong>.</li>
+<li>Si no hay sesión, se abre <strong>Ingreso al portal</strong>; después de ingresar o crear la cuenta, la reserva continúa.</li>
+</ol>
+<hr>
+<a id="sec3"></a>
+<h2>3. Centro de ayuda y solicitud por WhatsApp</h2>
+<p><strong>Dirigido a:</strong> visitantes y pacientes.</p>
+<h3>3.1 Abrir el centro de ayuda</h3>
+<p>El botón flotante <strong>Ayuda</strong> está siempre en la esquina inferior derecha de la página pública. Al hacer clic se abre el panel <strong>Centro de ayuda</strong>, titulado <strong>¿Cómo podemos ayudarte?</strong>.</p>
+<figure><img src="manual/img/03-centro-de-ayuda.png" alt="Centro de ayuda abierto"><figcaption><strong>Figura 3.</strong> Panel del centro de ayuda con las tres acciones principales y las preguntas frecuentes.</figcaption></figure>
+<p>Para cerrarlo se puede usar la <strong>X</strong> del panel, el botón <strong>Cerrar</strong> o la tecla <code>Escape</code>. En móvil, el panel ocupa el ancho de la pantalla y se abre por encima del contenido (ver sección 10).</p>
+<h3>3.2 Opciones del panel</h3>
+<table>
+<thead><tr><th>Opción</th><th>Para qué sirve</th></tr></thead>
+<tbody>
+<tr><td><strong>Pedir turno por WhatsApp</strong></td><td>Abre un formulario corto; al enviarlo se registra la solicitud y se arma el mensaje de WhatsApp</td></tr>
+<tr><td><strong>Reservar turno online</strong></td><td>Lleva al ingreso o registro y luego al asistente de reserva</td></tr>
+<tr><td><strong>Llamar a la clínica</strong></td><td>Abre el marcador del teléfono con el número de la clínica</td></tr>
+<tr><td><strong>Preguntas frecuentes</strong></td><td>Explica turnos, cuenta, datos pedidos, cancelaciones, coberturas, sedes y confirmación</td></tr>
+<tr><td><strong>Aviso de urgencias</strong></td><td>Recuerda que el sitio no es un canal de urgencias: llamar al <strong>107 (SAME)</strong> o al <strong>911</strong></td></tr>
+<tr><td><strong>Aviso de privacidad</strong></td><td>Indica que los datos se usan solo para contactar por esa solicitud</td></tr>
+</tbody>
+</table>
+
+<p>El horario que muestra el panel es <strong>Lun a Vie de 8 a 20 h · Sáb de 8 a 13 h</strong>. El teléfono y el número de WhatsApp se configuran por variables de entorno; en la demostración se muestra <strong>+54 263 436-8835</strong>.</p>
+<h3>3.3 Preguntas frecuentes</h3>
+<p>El panel incluye siete preguntas desplegables:</p>
+<ol>
+<li>¿Cómo saco un turno?</li>
+<li>¿Necesito crear una cuenta?</li>
+<li>¿Qué datos me van a pedir?</li>
+<li>¿Cómo cancelo o reprograma?</li>
+<li>¿Atienden obras sociales o prepagas?</li>
+<li>¿Dónde están las sedes?</li>
+<li>¿El turno queda confirmado al enviarlo?</li>
+</ol>
+<p>Cada respuesta se abre y se cierra con un clic. La recomendación general es <strong>no enviar datos médicos sensibles por chat</strong>.</p>
+<h3>3.4 Solicitud de turno sin cuenta, paso a paso</h3>
+<ol>
+<li>Abrir <strong>Ayuda</strong>.</li>
+<li>Hacer clic en <strong>Pedir turno por WhatsApp</strong>.</li>
+<li>Completar el formulario:</li>
+</ol>
+<table>
+<thead><tr><th>Campo</th><th>Obligatorio</th><th>Descripción</th></tr></thead>
+<tbody>
+<tr><td><strong>Nombre y apellido</strong></td><td>Sí</td><td>Nombre completo del paciente</td></tr>
+<tr><td><strong>DNI</strong></td><td>Sí</td><td>Documento del paciente; se usa para crear o vincular su ficha</td></tr>
+<tr><td><strong>Especialidad</strong></td><td>Sí</td><td>Se elige de la lista cargada en el sistema</td></tr>
+<tr><td><strong>Sede</strong></td><td>Sí</td><td>Centro, Norte o Sur, según la configuración</td></tr>
+<tr><td><strong>¿Qué día u horario preferís?</strong></td><td>Sí</td><td>Texto libre, por ejemplo “martes por la mañana”</td></tr>
+<tr><td><strong>Consulta o comentario</strong></td><td>No</td><td>Hasta 600 caracteres; no incluir datos médicos sensibles</td></tr>
+</tbody>
+</table>
+
+<figure><img src="manual/img/04-solicitud-whatsapp-formulario.png" alt="Formulario de solicitud por WhatsApp"><figcaption><strong>Figura 4.</strong> Formulario <strong>Pedir turno por WhatsApp</strong> completo. El contador del comentario muestra <code>0/600</code> cuando está vacío.</figcaption></figure>
+<ol>
+<li>Hacer clic en <strong>Abrir WhatsApp con el pedido</strong>.</li>
+</ol>
+<blockquote><p><strong>Atención:</strong> este botón <strong>registra la solicitud</strong> y muestra la pantalla de confirmación. Todavía <strong>no</strong> abre WhatsApp. El envío real se hace en el paso siguiente.</p></blockquote>
+<h3>3.5 Confirmación y envío del mensaje</h3>
+<p>Después de registrar la solicitud aparece la pantalla <strong>Solicitud registrada</strong>, con el mensaje ya armado.</p>
+<figure><img src="manual/img/05-solicitud-whatsapp-registrada.png" alt="Solicitud registrada"><figcaption><strong>Figura 5.</strong> Confirmación de la solicitud. El mensaje incluye nombre, DNI, especialidad, sede, preferencia y consulta.</figcaption></figure>
+<p>En esta pantalla hay tres acciones:</p>
+<ul>
+<li><strong>Abrir WhatsApp:</strong> abre <code>wa.me</code> con el mensaje precargado. Solo queda pulsar <strong>Enviar</strong> dentro de WhatsApp.</li>
+<li><strong>Copiar mensaje:</strong> copia el texto al portapapeles para pegarlo manualmente.</li>
+<li><strong>Hacer otra consulta:</strong> vuelve al inicio del centro de ayuda y limpia el formulario.</li>
+</ul>
+<blockquote><p><strong>Nota:</strong> si el registro en el panel falla por un problema de red, la aplicación igualmente arma el mensaje y permite enviarlo por WhatsApp. En ese caso se muestra un aviso de que la solicitud no pudo guardarse en el panel.</p></blockquote>
+<h3>3.6 Qué ocurre del lado de la clínica</h3>
+<p>Al registrar la solicitud:</p>
+<ol>
+<li>Se crea una <strong>solicitud de turno</strong> en estado <strong>Nueva</strong>.</li>
+<li>Se crea o vincula la ficha del paciente por <strong>DNI</strong>.</li>
+<li>La solicitud aparece en <strong>Solicitudes</strong> para recepción y administración.</li>
+<li>Recepción puede contactar al paciente por WhatsApp o teléfono.</li>
+<li>Si el paciente no tiene cuenta, se muestra <strong>Cuenta pendiente</strong>. Cuando se registre con el mismo DNI, podrá reclamar su historial.</li>
+<li>Recepción puede usar <strong>Reservar turno</strong> desde la solicitud para cargar el turno directamente.</li>
+</ol>
+<h3>3.7 Buenas prácticas para el visitante</h3>
+<ul>
+<li>Usar el DNI correcto: es la llave del historial.</li>
+<li>No escribir diagnósticos, estudios ni datos sensibles en <strong>Consulta o comentario</strong>.</li>
+<li>Revisar el mensaje antes de enviarlo por WhatsApp.</li>
+<li>Si no llega respuesta en el horario de atención, llamar a la clínica.</li>
+<li>Ante una urgencia, no usar el formulario: llamar al <strong>107</strong> o al <strong>911</strong>.</li>
+</ul>
+<hr>
+<a id="sec4"></a>
+<h2>4. Ingreso, registro y doble factor (2FA)</h2>
+<p><strong>Dirigido a:</strong> pacientes, recepción, médicos y administradores.</p>
+<h3>4.1 Panorama de accesos</h3>
+<p>La pantalla <strong>Ingreso al portal</strong> tiene cinco pestañas:</p>
+<table>
+<thead><tr><th>Pestaña</th><th>Perfil</th><th>Credencial</th></tr></thead>
+<tbody>
+<tr><td><strong>Paciente</strong></td><td>Paciente</td><td>DNI + contraseña</td></tr>
+<tr><td><strong>Médico</strong></td><td>Médico</td><td>Email + contraseña + 2FA</td></tr>
+<tr><td><strong>Recep.</strong></td><td>Recepción</td><td>DNI + contraseña</td></tr>
+<tr><td><strong>Admin</strong></td><td>Administrador</td><td>Email + contraseña + 2FA</td></tr>
+<tr><td><strong>Crear cuenta</strong></td><td>Nuevo paciente</td><td>Nombre, DNI, contraseña y datos opcionales</td></tr>
+</tbody>
+</table>
+
+<h3>4.2 Ingreso de pacientes por DNI</h3>
+<ol>
+<li>En la portada, hacer clic en <strong>Ingresar</strong>.</li>
+<li>Quedarse en la pestaña <strong>Paciente</strong>.</li>
+<li>Escribir el <strong>DNI</strong> sin puntos ni espacios.</li>
+<li>Escribir la <strong>contraseña</strong>.</li>
+<li>Hacer clic en <strong>Ingresar</strong>.</li>
+</ol>
+<figure><img src="manual/img/06-login-paciente.png" alt="Ingreso de paciente por DNI"><figcaption><strong>Figura 6.</strong> Pestaña <strong>Paciente</strong> del ingreso. El DNI es el usuario; la pantalla muestra además un acceso demo precargado.</figcaption></figure>
+<p>Si los datos son correctos, se abre <strong>Mis turnos</strong>. Si el DNI no existe o la contraseña es incorrecta, se muestra un aviso y no se inicia sesión.</p>
+<blockquote><p><strong>Seguridad:</strong> después de cinco intentos fallidos, la cuenta se bloquea temporalmente durante 15 minutos. Esto protege a los pacientes de intentos de acceso no autorizados.</p></blockquote>
+<h3>4.3 Crear una cuenta de paciente</h3>
+<ol>
+<li>En <strong>Ingreso al portal</strong>, hacer clic en la pestaña <strong>Crear cuenta</strong>.</li>
+<li>Completar:</li>
+</ol>
+<table>
+<thead><tr><th>Campo</th><th>Obligatorio</th><th>Observación</th></tr></thead>
+<tbody>
+<tr><td><strong>Nombre completo</strong></td><td>Sí</td><td>Tal como figura en el documento</td></tr>
+<tr><td><strong>DNI</strong></td><td>Sí</td><td>Será el usuario único de la cuenta</td></tr>
+<tr><td><strong>Email (opcional)</strong></td><td>No</td><td>Se usa solo como dato de contacto</td></tr>
+<tr><td><strong>Contraseña</strong></td><td>Sí</td><td>Mínimo 10 caracteres, con mayúscula, número y símbolo</td></tr>
+<tr><td><strong>Teléfono (opcional)</strong></td><td>No</td><td>Se guarda cifrado</td></tr>
+<tr><td><strong>Captcha</strong></td><td>Según configuración</td><td>Se muestra si el sitio tiene Turnstile activo</td></tr>
+</tbody>
+</table>
+
+<figure><img src="manual/img/07-login-crear-cuenta.png" alt="Crear cuenta de paciente"><figcaption><strong>Figura 7.</strong> Formulario <strong>Crear cuenta</strong>. El texto bajo el DNI explica que el historial de WhatsApp se vincula automáticamente.</figcaption></figure>
+<ol>
+<li>Hacer clic en <strong>Crear cuenta</strong>.</li>
+<li>Si el DNI ya tenía una solicitud o una ficha creada por recepción, la aplicación <strong>vincula el historial</strong> y muestra un mensaje de bienvenida.</li>
+<li>La sesión se inicia automáticamente y se abre <strong>Mis turnos</strong>.</li>
+</ol>
+<blockquote><p><strong>Importante:</strong> si al ingresar aparece el mensaje “Este DNI ya tiene una solicitud registrada”, no hay que crear una cuenta nueva con otro DNI. Hay que usar <strong>Crear cuenta</strong> con <strong>el mismo DNI</strong> para reclamar la ficha existente.</p></blockquote>
+<h3>4.4 Recuperar el historial de una solicitud de WhatsApp</h3>
+<p>El flujo está pensado para que nadie pierda su historial:</p>
+<ol>
+<li>El paciente pide un turno por WhatsApp sin cuenta.</li>
+<li>La solicitud crea una ficha con su DNI.</li>
+<li>Recepción puede reservar el turno desde esa ficha.</li>
+<li>Más adelante, el paciente crea su cuenta con el <strong>mismo DNI</strong>.</li>
+<li>La cuenta se vincula a la ficha existente y el paciente ve todos sus turnos, solicitudes y evoluciones.</li>
+</ol>
+<p>Si el DNI no coincide, se crea una ficha distinta. Por eso es fundamental verificarlo al tomar la solicitud.</p>
+<h3>4.5 Ingreso de recepción</h3>
+<ol>
+<li>Abrir <strong>Ingreso al portal</strong>.</li>
+<li>Elegir la pestaña <strong>Recep.</strong></li>
+<li>Escribir el <strong>DNI</strong> de la persona de recepción.</li>
+<li>Escribir la contraseña.</li>
+<li>Hacer clic en <strong>Ingresar</strong>.</li>
+</ol>
+<p>La sesión abre directamente <strong>Agenda semanal</strong>. Recepción no usa 2FA en esta versión.</p>
+<h3>4.6 Ingreso de médicos y administradores</h3>
+<ol>
+<li>Abrir <strong>Ingreso al portal</strong>.</li>
+<li>Elegir <strong>Médico</strong> o <strong>Admin</strong>.</li>
+<li>Escribir el <strong>email</strong> institucional.</li>
+<li>Escribir la contraseña.</li>
+<li>Hacer clic en <strong>Ingresar</strong>.</li>
+<li>Si es el primer ingreso, configurar 2FA (sección 4.7).</li>
+<li>Si ya está configurado, ingresar el código de 6 dígitos (sección 4.8).</li>
+</ol>
+<blockquote><p><strong>Nota:</strong> el 2FA es obligatorio para médicos y administradores. Sin el código válido no se completa el ingreso.</p></blockquote>
+<h3>4.7 Configurar 2FA en el primer ingreso</h3>
+<p>La primera vez que un médico o administrador ingresa, la aplicación pide configurar el doble factor.</p>
+<figure><img src="manual/img/08-configurar-2fa.png" alt="Configurar 2FA"><figcaption><strong>Figura 8.</strong> Pantalla <strong>Configurar 2FA</strong> con el código QR, el secreto y el campo para el código de 6 dígitos.</figcaption></figure>
+<ol>
+<li>Abrir la aplicación autenticadora (Google Authenticator, Authy, 1Password u otra compatible con TOTP).</li>
+<li>Escanear el <strong>código QR</strong>.</li>
+<li>Si no se puede escanear, ingresar manualmente el <strong>secreto</strong> que aparece debajo del QR.</li>
+<li>Escribir el <strong>código de 6 dígitos</strong> que muestra la aplicación.</li>
+<li>Hacer clic en <strong>Activar 2FA</strong>.</li>
+<li>Guardar los <strong>códigos de recuperación</strong> que se muestran una sola vez.</li>
+</ol>
+<blockquote><p><strong>Muy importante:</strong> los códigos de recuperación no se vuelven a mostrar. Guardarlos en un lugar seguro. Si se pierden el dispositivo y los códigos, hay que contactar al administrador del sistema.</p></blockquote>
+<h3>4.8 Verificar 2FA en ingresos posteriores</h3>
+<ol>
+<li>Ingresar email y contraseña.</li>
+<li>Cuando aparezca <strong>Verificación 2FA</strong>, abrir la aplicación autenticadora.</li>
+<li>Escribir el código actual de 6 dígitos.</li>
+<li>Hacer clic en <strong>Verificar</strong>.</li>
+</ol>
+<figure><img src="manual/img/09-verificacion-2fa.png" alt="Verificación 2FA"><figcaption><strong>Figura 9.</strong> Diálogo <strong>Verificación 2FA</strong> para una cuenta que ya tiene el doble factor activo.</figcaption></figure>
+<p>El código cambia cada 30 segundos aproximadamente. Si se rechaza, esperar al siguiente código y volver a intentar. Verificar que la hora del teléfono esté sincronizada automáticamente.</p>
+<h3>4.9 Cierre de sesión</h3>
+<p>En la cabecera del portal, a la derecha del nombre y el rol, hay un botón con el ícono de salida y el título <strong>Cerrar sesión</strong>. Al hacer clic se borra la sesión local y se vuelve a la portada.</p>
+<blockquote><p><strong>Recomendación:</strong> cerrar sesión siempre en equipos compartidos, especialmente en recepción y administración.</p></blockquote>
+<hr>
+<a id="sec5"></a>
+<h2>5. Portal del paciente</h2>
+<p><strong>Dirigido a:</strong> pacientes con cuenta.</p>
+<h3>5.1 Estructura del portal</h3>
+<p>Después de ingresar, el paciente ve una cabecera con:</p>
+<ul>
+<li>La marca de la clínica.</li>
+<li>Los accesos <strong>Mis turnos</strong>, <strong>Historial clínico</strong> y <strong>Reservar</strong>.</li>
+<li>Su nombre y el rol <strong>Paciente</strong>.</li>
+<li>El botón <strong>Cerrar sesión</strong>.</li>
+</ul>
+<p>La vista inicial es <strong>Mis turnos</strong>.</p>
+<h3>5.2 Mis turnos</h3>
+<figure><img src="manual/img/10-paciente-mis-turnos.png" alt="Mis turnos del paciente"><figcaption><strong>Figura 10.</strong> Pantalla <strong>Mis turnos</strong> con los turnos próximos, el historial y los accesos para reservar o ver el historial clínico.</figcaption></figure>
+<p>La pantalla se divide en dos bloques:</p>
+<ul>
+<li><strong>Próximos:</strong> turnos de hoy en adelante que no están cancelados, atendidos ni marcados como no asistió.</li>
+<li><strong>Historial:</strong> turnos pasados o cerrados, que se muestran atenuados.</li>
+</ul>
+<p>Cada tarjeta muestra fecha, hora, médico, especialidad, sede y estado. Los botones principales son:</p>
+<table>
+<thead><tr><th>Botón</th><th>Acción</th></tr></thead>
+<tbody>
+<tr><td><strong>Historial clínico</strong></td><td>Abre el historial completo del paciente</td></tr>
+<tr><td><strong>Reservar turno</strong></td><td>Abre el asistente de reserva online</td></tr>
+</tbody>
+</table>
+
+<blockquote><p><strong>Cancelaciones:</strong> esta versión no muestra un botón de cancelación dentro del portal del paciente. Para cancelar o reprogramar, el paciente debe contactar a recepción por WhatsApp o teléfono. Recepción puede cancelar el turno desde la agenda.</p></blockquote>
+<h3>5.3 Estados de un turno</h3>
+<table>
+<thead><tr><th>Estado</th><th>Significado</th></tr></thead>
+<tbody>
+<tr><td><strong>Pendiente</strong></td><td>El turno fue reservado y espera confirmación de recepción</td></tr>
+<tr><td><strong>Confirmado</strong></td><td>Recepción confirmó el turno</td></tr>
+<tr><td><strong>En sala</strong></td><td>El paciente llegó y está en sala de espera</td></tr>
+<tr><td><strong>Atendido</strong></td><td>El médico completó la atención</td></tr>
+<tr><td><strong>Cancelado</strong></td><td>El turno fue cancelado</td></tr>
+<tr><td><strong>No asistió</strong></td><td>El paciente no se presentó</td></tr>
+</tbody>
+</table>
+
+<h3>5.4 Historial clínico del paciente</h3>
+<p>Desde <strong>Mis turnos</strong>, hacer clic en <strong>Historial clínico</strong>. También se puede usar el acceso <strong>Historial clínico</strong> de la cabecera.</p>
+<figure><img src="manual/img/11-paciente-historial.png" alt="Historial clínico del paciente"><figcaption><strong>Figura 11.</strong> Historial clínico completo del paciente, con resumen, evoluciones, turnos y solicitudes de WhatsApp.</figcaption></figure>
+<p>El historial se compone de:</p>
+<ol>
+<li><strong>Ficha del paciente:</strong> nombre, DNI, teléfono y email. El distintivo indica si la cuenta está activa o pendiente.</li>
+<li><strong>Resumen:</strong> turnos totales, atendidos, próximos, cantidad de evoluciones y cantidad de solicitudes.</li>
+<li><strong>Evoluciones clínicas:</strong> motivo, diagnóstico, tratamiento y notas de cada atención.</li>
+<li><strong>Turnos del paciente:</strong> todos los turnos con su estado.</li>
+<li><strong>Solicitudes de WhatsApp:</strong> pedidos registrados, con especialidad, sede, preferencia y mensaje.</li>
+</ol>
+<p>El paciente solo puede ver su propio historial. La aplicación lo obtiene a partir de su sesión y su DNI.</p>
+<h3>5.5 Reserva online: paso 1, especialidad</h3>
+<ol>
+<li>En <strong>Mis turnos</strong>, hacer clic en <strong>Reservar turno</strong>.</li>
+<li>Elegir una especialidad entre las tarjetas disponibles.</li>
+</ol>
+<figure><img src="manual/img/12-reserva-paso-1-especialidad.png" alt="Reserva, paso 1: especialidad"><figcaption><strong>Figura 12.</strong> Paso 1 del asistente: <strong>Especialidad</strong>. Al elegir una tarjeta se avanza automáticamente al paso 2.</figcaption></figure>
+<p>El asistente muestra los cinco pasos en la parte superior: <strong>Especialidad → Sede → Médico → Horario → Datos</strong>.</p>
+<h3>5.6 Reserva online: paso 2, sede</h3>
+<ol>
+<li>Elegir la sede donde se quiere atender.</li>
+<li>La tarjeta muestra nombre, dirección y ciudad.</li>
+</ol>
+<figure><img src="manual/img/13-reserva-paso-2-sede.png" alt="Reserva, paso 2: sede"><figcaption><strong>Figura 13.</strong> Paso 2: <strong>Sede</strong>. La selección condiciona los médicos y horarios disponibles.</figcaption></figure>
+<h3>5.7 Reserva online: paso 3, médico</h3>
+<ol>
+<li>Revisar los médicos disponibles para la especialidad y la sede elegidas.</li>
+<li>Cada tarjeta muestra nombre, especialidad, breve biografía y honorario de consulta.</li>
+<li>Hacer clic en el médico deseado.</li>
+</ol>
+<figure><img src="manual/img/14-reserva-paso-3-medico.png" alt="Reserva, paso 3: médico"><figcaption><strong>Figura 14.</strong> Paso 3: <strong>Médico</strong>. Solo se listan los profesionales que atienden en la especialidad y sede seleccionadas.</figcaption></figure>
+<blockquote><p><strong>Nota:</strong> si no hay médicos con esos filtros, se muestra “No hay médicos disponibles con estos filtros”. En ese caso, volver atrás y cambiar la sede o la especialidad.</p></blockquote>
+<h3>5.8 Reserva online: paso 4, horario</h3>
+<ol>
+<li>Elegir la <strong>fecha</strong> en el selector.</li>
+<li>Esperar a que se carguen los horarios disponibles.</li>
+<li>Hacer clic en un horario habilitado.</li>
+</ol>
+<figure><img src="manual/img/15-reserva-paso-4-horario.png" alt="Reserva, paso 4: horario"><figcaption><strong>Figura 15.</strong> Paso 4: <strong>Horario</strong>. Los horarios ocupados o demasiado próximos aparecen deshabilitados.</figcaption></figure>
+<p>Reglas importantes:</p>
+<ul>
+<li>Solo se puede reservar desde la fecha actual en adelante.</li>
+<li>Un turno debe tener al menos <strong>2 horas de anticipación</strong>.</li>
+<li>Los horarios ya reservados no se pueden elegir.</li>
+<li>Si no hay disponibilidad, se muestra “No hay disponibilidad en esta fecha” y hay que probar otra fecha, sede o médico.</li>
+</ul>
+<h3>5.9 Reserva online: paso 5, datos y confirmación</h3>
+<ol>
+<li>Revisar y completar los datos del paciente.</li>
+<li>El <strong>DNI</strong> aparece bloqueado si el paciente ya tiene DNI en su cuenta.</li>
+<li>Agregar email, teléfono y notas para el médico si hace falta.</li>
+<li>Revisar el <strong>Resumen</strong> de la derecha: médico, especialidad, sede, fecha y hora.</li>
+<li>Completar el captcha si el sitio lo solicita.</li>
+<li>Hacer clic en <strong>Confirmar reserva</strong>.</li>
+</ol>
+<figure><img src="manual/img/16-reserva-paso-5-datos.png" alt="Reserva, paso 5: datos"><figcaption><strong>Figura 16.</strong> Paso 5: <strong>Datos</strong>. El resumen permite verificar toda la reserva antes de confirmar.</figcaption></figure>
+<blockquote><p><strong>Importante:</strong> el turno y el historial quedan asociados al DNI que se muestra en el formulario. Si el DNI no es correcto, el turno quedará vinculado a otra ficha.</p></blockquote>
+<h3>5.10 Reserva confirmada</h3>
+<p>Si la reserva se guarda correctamente, se muestra <strong>¡Turno confirmado!</strong> con el detalle.</p>
+<figure><img src="manual/img/17-reserva-confirmada.png" alt="Reserva confirmada"><figcaption><strong>Figura 17.</strong> Confirmación de la reserva con médico, especialidad, fecha, horario y sede.</figcaption></figure>
+<p>Acciones disponibles:</p>
+<ul>
+<li><strong>Finalizar:</strong> vuelve a <strong>Mis turnos</strong>.</li>
+<li><strong>Reservar otro turno:</strong> reinicia el asistente en el paso 1.</li>
+</ul>
+<p>El turno se crea en estado <strong>Pendiente</strong> hasta que recepción lo confirme. El paciente puede verlo en <strong>Mis turnos</strong>.</p>
+<h3>5.11 Errores frecuentes al reservar</h3>
+<table>
+<thead><tr><th>Mensaje o situación</th><th>Causa</th><th>Qué hacer</th></tr></thead>
+<tbody>
+<tr><td>“No hay disponibilidad en esta fecha”</td><td>No hay horarios libres para ese médico, sede y fecha</td><td>Probar otra fecha u otro médico</td></tr>
+<tr><td>“El horario elegido ya no está disponible”</td><td>Otra persona tomó el turno mientras se completaba la reserva</td><td>Volver al paso 4 y elegir otro horario</td></tr>
+<tr><td>“Los turnos requieren al menos 2 horas de anticipación”</td><td>Se intentó reservar un horario demasiado cercano</td><td>Elegir un horario posterior</td></tr>
+<tr><td>“No hay médicos disponibles con estos filtros”</td><td>La combinación especialidad/sede no tiene profesionales</td><td>Cambiar sede o especialidad</td></tr>
+<tr><td>La sesión se cierra o vuelve al inicio</td><td>La sesión expiró</td><td>Ingresar de nuevo y repetir la reserva</td></tr>
+<tr><td>El captcha no permite continuar</td><td>Turnstile no se completó o falló</td><td>Recargar la página y completar el captcha</td></tr>
+</tbody>
+</table>
+
+<hr>
+<a id="sec6"></a>
+<h2>6. Recepción</h2>
+<p><strong>Dirigido a:</strong> personal de recepción.</p>
+<h3>6.1 Ingreso y pantalla inicial</h3>
+<ol>
+<li>Abrir <strong>Ingreso al portal</strong>.</li>
+<li>Elegir <strong>Recep.</strong></li>
+<li>Ingresar <strong>DNI + contraseña</strong>.</li>
+<li>Hacer clic en <strong>Ingresar</strong>.</li>
+</ol>
+<p>La pantalla inicial es <strong>Agenda semanal</strong>. El menú de recepción tiene tres accesos:</p>
+<ul>
+<li><strong>Agenda</strong></li>
+<li><strong>Reservar</strong></li>
+<li><strong>Solicitudes</strong></li>
+</ul>
+<h3>6.2 Agenda semanal</h3>
+<figure><img src="manual/img/18-recepcion-agenda.png" alt="Agenda semanal de recepción"><figcaption><strong>Figura 18.</strong> Agenda semanal de recepción con turnos por día, filtros y navegación por semanas.</figcaption></figure>
+<p>La agenda muestra una grilla de <strong>lunes a domingo</strong>, de <strong>08:00 a 17:00</strong>, con los turnos ubicados por fecha y hora. Cada tarjeta indica hora, paciente, médico y estado.</p>
+<p>Controles:</p>
+<table>
+<thead><tr><th>Control</th><th>Acción</th></tr></thead>
+<tbody>
+<tr><td>Flecha izquierda</td><td>Semana anterior</td></tr>
+<tr><td>Flecha derecha</td><td>Semana siguiente</td></tr>
+<tr><td><strong>Hoy</strong></td><td>Vuelve a la semana actual</td></tr>
+<tr><td><strong>Especialidad</strong></td><td>Filtra por especialidad</td></tr>
+<tr><td><strong>Sede</strong></td><td>Filtra por sede</td></tr>
+<tr><td><strong>Médico</strong></td><td>Filtra por profesional</td></tr>
+<tr><td><strong>Estado</strong></td><td>Filtra por estado del turno</td></tr>
+</tbody>
+</table>
+
+<p>Los filtros se combinan. Para limpiar un filtro, elegir la opción <strong>Todas</strong> o <strong>Todos</strong>.</p>
+<h3>6.3 Detalle del turno y cambios de estado</h3>
+<p>Hacer clic en cualquier tarjeta de la agenda para abrir el detalle.</p>
+<figure><img src="manual/img/19-recepcion-turno-detalle.png" alt="Detalle del turno en recepción"><figcaption><strong>Figura 19.</strong> Detalle del turno con médico, especialidad, sede, DNI, teléfono, email, notas y estado.</figcaption></figure>
+<p>El detalle permite:</p>
+<table>
+<thead><tr><th>Botón</th><th>Cuándo aparece</th><th>Acción</th></tr></thead>
+<tbody>
+<tr><td><strong>Historial</strong></td><td>El turno tiene paciente vinculado</td><td>Abre el historial clínico del paciente</td></tr>
+<tr><td><strong>Confirmar</strong></td><td>Estado <strong>Pendiente</strong></td><td>Pasa el turno a <strong>Confirmado</strong></td></tr>
+<tr><td><strong>Marcar en sala</strong></td><td>Estados <strong>Pendiente</strong> o <strong>Confirmado</strong></td><td>Pasa el turno a <strong>En sala</strong></td></tr>
+<tr><td><strong>Atendido</strong></td><td>El turno no está atendido</td><td>Marca la atención como completada</td></tr>
+<tr><td><strong>Cancelar</strong></td><td>El turno no está cancelado</td><td>Cancela el turno</td></tr>
+</tbody>
+</table>
+
+<blockquote><p><strong>Cancelación tardía:</strong> si se cancela un turno con menos de 24 horas de anticipación, el sistema registra la cancelación como tardía para su seguimiento.</p></blockquote>
+<h3>6.4 Consultar el historial desde la agenda</h3>
+<ol>
+<li>Abrir el detalle de un turno.</li>
+<li>Hacer clic en <strong>Historial</strong>.</li>
+<li>Se abre el diálogo <strong>Historial clínico</strong>.</li>
+</ol>
+<figure><img src="manual/img/20-recepcion-historial.png" alt="Historial clínico desde recepción"><figcaption><strong>Figura 20.</strong> Historial clínico consultado por recepción desde la agenda.</figcaption></figure>
+<p>Recepción puede consultar:</p>
+<ul>
+<li>Ficha del paciente y estado de la cuenta.</li>
+<li>Resumen de turnos, atenciones, evoluciones y solicitudes.</li>
+<li>Evoluciones clínicas.</li>
+<li>Turnos del paciente.</li>
+<li>Solicitudes de WhatsApp.</li>
+</ul>
+<p>En esta vista recepción <strong>no</strong> agrega evoluciones; solo el médico lo hace desde su agenda.</p>
+<h3>6.5 Bandeja de solicitudes</h3>
+<p>El acceso <strong>Solicitudes</strong> abre la bandeja de pedidos recibidos desde el centro de ayuda.</p>
+<figure><img src="manual/img/21-recepcion-solicitudes.png" alt="Bandeja de solicitudes de recepción"><figcaption><strong>Figura 21.</strong> Bandeja <strong>Solicitudes de turno</strong> con filtros por estado y acciones por solicitud.</figcaption></figure>
+<p>La bandeja muestra:</p>
+<ul>
+<li>Nombre del paciente y estado: <strong>Nueva</strong>, <strong>Contactada</strong> o <strong>Cerrada</strong>.</li>
+<li>Distintivo <strong>Cuenta pendiente</strong> si el paciente todavía no creó su cuenta.</li>
+<li>Fecha y hora de la solicitud, DNI y teléfono.</li>
+<li>Especialidad, sede y preferencia horaria.</li>
+<li>Mensaje o consulta del paciente.</li>
+<li>Botón <strong>Actualizar</strong> para recargar la lista.</li>
+</ul>
+<p>Filtros disponibles: <strong>Todas</strong>, <strong>Nuevas</strong>, <strong>Contactadas</strong>, <strong>Cerradas</strong>, con el total de cada grupo.</p>
+<p>Acciones por solicitud:</p>
+<table>
+<thead><tr><th>Acción</th><th>Resultado</th></tr></thead>
+<tbody>
+<tr><td><strong>Reservar turno</strong></td><td>Abre el asistente con los datos de la solicitud precargados</td></tr>
+<tr><td><strong>Historial</strong></td><td>Abre el historial del paciente si ya tiene ficha</td></tr>
+<tr><td><strong>WhatsApp</strong></td><td>Abre WhatsApp con un mensaje de respuesta precargado</td></tr>
+<tr><td><strong>Contactada</strong></td><td>Marca la solicitud como contactada</td></tr>
+<tr><td><strong>Cerrar</strong></td><td>Marca la solicitud como cerrada</td></tr>
+</tbody>
+</table>
+
+<blockquote><p><strong>Recomendación:</strong> usar <strong>Contactada</strong> cuando ya se habló con el paciente, y <strong>Cerrar</strong> cuando la solicitud se resolvió o el paciente desistió. Así la bandeja refleja el trabajo real.</p></blockquote>
+<h3>6.6 Reservar un turno desde una solicitud de WhatsApp</h3>
+<p>Este es el flujo central para pedidos que llegan por WhatsApp.</p>
+<ol>
+<li>Abrir <strong>Solicitudes</strong>.</li>
+<li>Ubicar la solicitud y hacer clic en <strong>Reservar turno</strong>.</li>
+<li>El asistente se abre con <strong>nombre, DNI, teléfono, especialidad y sede</strong> precargados.</li>
+<li>Si la solicitud ya trae especialidad y sede, el asistente arranca en el paso <strong>Médico</strong>. Si falta algún dato, arranca antes.</li>
+<li>Verificar la identidad del paciente en el recuadro superior.</li>
+<li>Elegir médico, fecha y horario.</li>
+<li>Completar o revisar los datos y confirmar.</li>
+</ol>
+<figure><img src="manual/img/22-recepcion-reserva-desde-whatsapp.png" alt="Reserva desde una solicitud de WhatsApp"><figcaption><strong>Figura 22.</strong> Asistente abierto desde una solicitud. El recuadro superior muestra el paciente y el distintivo <strong>Desde solicitud de WhatsApp</strong>.</figcaption></figure>
+<p>En el paso de datos se ve el resumen y el formulario del paciente.</p>
+<figure><img src="manual/img/23-recepcion-reserva-datos.png" alt="Datos de la reserva desde WhatsApp"><figcaption><strong>Figura 23.</strong> Paso <strong>Datos</strong> de una reserva gestionada por recepción. El turno se asocia al DNI del paciente, no a la cuenta de recepción.</figcaption></figure>
+<p>Al confirmar se muestra <strong>¡Turno confirmado!</strong> y la solicitud pasa automáticamente a <strong>Contactada</strong>.</p>
+<figure><img src="manual/img/24-recepcion-reserva-confirmada.png" alt="Reserva desde WhatsApp confirmada"><figcaption><strong>Figura 24.</strong> Confirmación de la reserva creada desde una solicitud de WhatsApp.</figcaption></figure>
+<blockquote><p><strong>Regla clave:</strong> el turno pertenece al <strong>paciente identificado por su DNI</strong>. Aunque quien opera sea recepción, el sistema ignora cualquier intención de asociar el turno a la cuenta de recepción y exige el DNI del paciente. Nunca se debe reservar un turno a nombre del personal.</p></blockquote>
+<p>Después de confirmar, la aplicación vuelve a <strong>Solicitudes</strong> para seguir atendiendo la bandeja.</p>
+<h3>6.7 Reserva manual desde el menú Reservar</h3>
+<p>El acceso <strong>Reservar</strong> del menú sirve para cargar un turno de forma manual, por ejemplo para una persona que llama por teléfono o se presenta en el mostrador.</p>
+<ol>
+<li>Hacer clic en <strong>Reservar</strong>.</li>
+<li>Elegir <strong>Especialidad</strong>.</li>
+<li>Elegir <strong>Sede</strong>.</li>
+<li>Elegir <strong>Médico</strong>.</li>
+<li>Elegir <strong>Fecha</strong> y <strong>Horario</strong>.</li>
+<li>Completar los datos del paciente.</li>
+<li>Confirmar la reserva.</li>
+</ol>
+<p>El formulario de datos incluye:</p>
+<ul>
+<li><strong>Nombre completo</strong></li>
+<li><strong>DNI</strong> (obligatorio)</li>
+<li><strong>Email (opcional)</strong></li>
+<li><strong>Teléfono</strong></li>
+<li><strong>Notas para el médico (opcional)</strong></li>
+</ul>
+<blockquote><p><strong>Importante:</strong> el DNI es obligatorio. Si el paciente no tiene cuenta, se crea o vincula una ficha con <strong>Cuenta pendiente</strong>. Cuando el paciente se registre con ese DNI, podrá ver su historial.</p></blockquote>
+<h3>6.8 Identidad del paciente y DNI</h3>
+<p>El DNI es la clave que une turnos, solicitudes y evoluciones. Por eso:</p>
+<ul>
+<li>Verificar el DNI con el paciente antes de confirmar.</li>
+<li>No usar el DNI de otra persona ni el del personal.</li>
+<li>Si el paciente dicta el DNI con puntos, el sistema lo normaliza; aun así, confirmar los dígitos.</li>
+<li>Si el DNI ya existe, la reserva se vincula a la ficha existente.</li>
+<li>Si el DNI no existe, se crea una ficha nueva.</li>
+<li>Si el paciente ya tiene cuenta, el turno aparecerá en su portal.</li>
+</ul>
+<h3>6.9 Checklist diaria de recepción</h3>
+<ul>
+<li class="task"><span class="checkbox">☐</span> Ingresar con DNI y contraseña.</li>
+<li class="task"><span class="checkbox">☐</span> Revisar la agenda de la semana y los turnos del día.</li>
+<li class="task"><span class="checkbox">☐</span> Confirmar los turnos pendientes.</li>
+<li class="task"><span class="checkbox">☐</span> Revisar la bandeja de <strong>Solicitudes</strong> y responder las nuevas.</li>
+<li class="task"><span class="checkbox">☐</span> Reservar los turnos pedidos por WhatsApp usando <strong>Reservar turno</strong>.</li>
+<li class="task"><span class="checkbox">☐</span> Marcar <strong>En sala</strong> cuando llega el paciente.</li>
+<li class="task"><span class="checkbox">☐</span> Marcar <strong>Atendido</strong> cuando termina la atención (el <strong>No asistió</strong> se registra desde la agenda del médico).</li>
+<li class="task"><span class="checkbox">☐</span> Cancelar o reprogramar los turnos avisados.</li>
+<li class="task"><span class="checkbox">☐</span> Cerrar sesión al terminar el turno.</li>
+</ul>
+<hr>
+<a id="sec7"></a>
+<h2>7. Médico</h2>
+<p><strong>Dirigido a:</strong> médicos con cuenta institucional.</p>
+<h3>7.1 Ingreso</h3>
+<ol>
+<li>Abrir <strong>Ingreso al portal</strong>.</li>
+<li>Elegir la pestaña <strong>Médico</strong>.</li>
+<li>Ingresar <strong>email + contraseña</strong>.</li>
+<li>Completar <strong>2FA</strong>.</li>
+<li>La pantalla inicial es <strong>Mi agenda</strong>.</li>
+</ol>
+<h3>7.2 Mi agenda</h3>
+<figure><img src="manual/img/25-medico-agenda.png" alt="Agenda diaria del médico"><figcaption><strong>Figura 25.</strong> Pantalla <strong>Mi agenda</strong> del médico, con selector de fecha y listado de turnos.</figcaption></figure>
+<p>La agenda del médico muestra un solo día. Para cambiar de fecha, usar el selector <strong>Fecha</strong>. Cada tarjeta indica:</p>
+<ul>
+<li>Hora de inicio y fin.</li>
+<li>Nombre del paciente.</li>
+<li>Sede y consultorio.</li>
+<li>Estado del turno.</li>
+</ul>
+<p>Si no hay turnos, se muestra <strong>Sin turnos para esta fecha</strong>.</p>
+<h3>7.3 Detalle del turno</h3>
+<p>Hacer clic en una tarjeta para abrir el detalle.</p>
+<figure><img src="manual/img/26-medico-turno-detalle.png" alt="Detalle del turno para el médico"><figcaption><strong>Figura 26.</strong> Detalle del turno con DNI, teléfono, email, sede, notas y acciones de estado.</figcaption></figure>
+<p>El médico puede:</p>
+<table>
+<thead><tr><th>Botón</th><th>Acción</th></tr></thead>
+<tbody>
+<tr><td><strong>Historial clínico</strong></td><td>Abre el historial del paciente</td></tr>
+<tr><td><strong>Confirmar</strong></td><td>Confirma un turno pendiente</td></tr>
+<tr><td><strong>En sala</strong></td><td>Marca que el paciente está en sala</td></tr>
+<tr><td><strong>Atendido</strong></td><td>Marca la atención como completada</td></tr>
+<tr><td><strong>No asistió</strong></td><td>Registra que el paciente no se presentó</td></tr>
+</tbody>
+</table>
+
+<blockquote><p><strong>Nota:</strong> el médico no tiene botón <strong>Cancelar</strong>. Las cancelaciones las gestiona recepción. El médico solo puede consultar pacientes que hayan tenido o tengan un turno con él.</p></blockquote>
+<h3>7.4 Historial clínico del paciente</h3>
+<ol>
+<li>Abrir el detalle de un turno.</li>
+<li>Hacer clic en <strong>Historial clínico</strong>.</li>
+</ol>
+<figure><img src="manual/img/27-medico-historial.png" alt="Historial clínico desde el médico"><figcaption><strong>Figura 27.</strong> Historial clínico abierto desde la agenda del médico.</figcaption></figure>
+<p>El médico ve la ficha, el resumen, las evoluciones, los turnos y las solicitudes del paciente. Además, al abrirlo desde un turno, el formulario de nueva evolución queda asociado a ese turno.</p>
+<h3>7.5 Agregar una nueva evolución clínica</h3>
+<ol>
+<li>Abrir el historial del paciente.</li>
+<li>Ir al formulario <strong>Nueva evolución clínica</strong>.</li>
+<li>Completar:</li>
+</ol>
+<table>
+<thead><tr><th>Campo</th><th>Obligatorio</th><th>Descripción</th></tr></thead>
+<tbody>
+<tr><td><strong>Fecha</strong></td><td>No</td><td>Si se omite, se usa la fecha actual</td></tr>
+<tr><td><strong>Motivo de consulta</strong></td><td>Al menos uno de motivo, diagnóstico o notas</td><td>Ejemplo: “control de presión”</td></tr>
+<tr><td><strong>Diagnóstico</strong></td><td>Al menos uno</td><td>Diagnóstico o impresión clínica</td></tr>
+<tr><td><strong>Tratamiento indicado</strong></td><td>No</td><td>Medicación, estudios o indicaciones</td></tr>
+<tr><td><strong>Notas / evolución</strong></td><td>Al menos uno</td><td>Detalle de la atención</td></tr>
+</tbody>
+</table>
+
+<ol>
+<li>Hacer clic en <strong>Guardar evolución</strong>.</li>
+</ol>
+<figure><img src="manual/img/28-medico-nueva-evolucion.png" alt="Nueva evolución clínica"><figcaption><strong>Figura 28.</strong> Formulario <strong>Nueva evolución clínica</strong> dentro del historial del paciente.</figcaption></figure>
+<p>La evolución se guarda y aparece inmediatamente en el historial. También queda visible para el paciente en su portal.</p>
+<blockquote><p><strong>Buenas prácticas:</strong> registrar la evolución durante o inmediatamente después de la atención; no incluir datos de terceros; ser claro y objetivo; no borrar ni reescribir evoluciones anteriores (si hace falta corregir, agregar una nueva nota aclaratoria).</p></blockquote>
+<h3>7.6 Alcance y privacidad</h3>
+<ul>
+<li>El médico solo accede a pacientes de su propia agenda.</li>
+<li>Si intenta abrir un historial ajeno, la API rechaza la solicitud.</li>
+<li>Las evoluciones quedan asociadas al paciente y al turno cuando se abren desde la agenda.</li>
+<li>El historial es información sensible: no compartir pantalla ni credenciales.</li>
+<li>Cerrar sesión al terminar la jornada.</li>
+</ul>
+<hr>
+<a id="sec8"></a>
+<h2>8. Administrador</h2>
+<p><strong>Dirigido a:</strong> administración del sistema.</p>
+<h3>8.1 Ingreso</h3>
+<ol>
+<li>Abrir <strong>Ingreso al portal</strong>.</li>
+<li>Elegir <strong>Admin</strong>.</li>
+<li>Ingresar <strong>email + contraseña</strong>.</li>
+<li>Completar <strong>2FA</strong>.</li>
+<li>La pantalla inicial es <strong>Agenda semanal</strong>.</li>
+</ol>
+<p>El menú de administración tiene:</p>
+<ul>
+<li><strong>Agenda</strong></li>
+<li><strong>Dashboard</strong></li>
+<li><strong>Solicitudes</strong></li>
+</ul>
+<h3>8.2 Dashboard</h3>
+<figure><img src="manual/img/29-admin-dashboard.png" alt="Dashboard de administración"><figcaption><strong>Figura 29.</strong> Dashboard con indicadores del día y distribución de turnos por especialidad y estado.</figcaption></figure>
+<p>El dashboard muestra cuatro indicadores:</p>
+<table>
+<thead><tr><th>Indicador</th><th>Qué mide</th></tr></thead>
+<tbody>
+<tr><td><strong>Turnos hoy</strong></td><td>Turnos registrados para la fecha actual</td></tr>
+<tr><td><strong>Confirmados hoy</strong></td><td>Turnos confirmados para hoy</td></tr>
+<tr><td><strong>Cancelados hoy</strong></td><td>Turnos cancelados para hoy</td></tr>
+<tr><td><strong>Total histórico</strong></td><td>Todos los turnos registrados</td></tr>
+</tbody>
+</table>
+
+<p>Debajo se muestran dos gráficos de barras:</p>
+<ul>
+<li><strong>Por especialidad:</strong> cantidad de turnos por especialidad.</li>
+<li><strong>Por estado:</strong> cantidad de turnos por estado (pendiente, confirmado, en sala, atendido, cancelado, no asistió).</li>
+</ul>
+<p>Los datos se actualizan al volver a entrar o recargar la vista.</p>
+<h3>8.3 Agenda</h3>
+<figure><img src="manual/img/30-admin-agenda.png" alt="Agenda del administrador"><figcaption><strong>Figura 30.</strong> Agenda semanal del administrador, con la misma vista y filtros que recepción.</figcaption></figure>
+<p>La agenda del administrador funciona igual que la de recepción:</p>
+<ul>
+<li>Navegación por semanas y botón <strong>Hoy</strong>.</li>
+<li>Filtros por especialidad, sede, médico y estado.</li>
+<li>Detalle del turno con <strong>Historial</strong>, <strong>Confirmar</strong>, <strong>Marcar en sala</strong>, <strong>Atendido</strong> y <strong>Cancelar</strong>.</li>
+</ul>
+<h3>8.4 Solicitudes</h3>
+<figure><img src="manual/img/31-admin-solicitudes.png" alt="Solicitudes del administrador"><figcaption><strong>Figura 31.</strong> Bandeja de solicitudes del administrador, con las mismas acciones que recepción.</figcaption></figure>
+<p>La bandeja es la misma que la de recepción: filtros, estados, datos del paciente, <strong>Reservar turno</strong>, <strong>Historial</strong>, <strong>WhatsApp</strong>, <strong>Contactada</strong> y <strong>Cerrar</strong>.</p>
+<h3>8.5 Tareas habituales y diferencias con recepción</h3>
+<table>
+<thead><tr><th>Tarea</th><th>Recepción</th><th>Administrador</th></tr></thead>
+<tbody>
+<tr><td>Ver agenda semanal</td><td>Sí</td><td>Sí</td></tr>
+<tr><td>Reservar turno manual</td><td>Sí, desde <strong>Reservar</strong></td><td>Solo desde una solicitud de la bandeja</td></tr>
+<tr><td>Reservar desde solicitud</td><td>Sí</td><td>Sí</td></tr>
+<tr><td>Consultar historial</td><td>Sí</td><td>Sí</td></tr>
+<tr><td>Ver dashboard</td><td>No</td><td>Sí</td></tr>
+<tr><td>Recargar datos demo / seed</td><td>No</td><td>Sí, con permisos especiales</td></tr>
+<tr><td>2FA obligatorio</td><td>No</td><td>Sí</td></tr>
+</tbody>
+</table>
+
+<blockquote><p><strong>Nota:</strong> el administrador tiene una visión global, pero las reglas de negocio son las mismas: los turnos se asocian al DNI del paciente y las validaciones de disponibilidad y anticipación se aplican igual.</p></blockquote>
+<hr>
+<a id="sec9"></a>
+<h2>9. Flujos de trabajo completos</h2>
+<h3>9.1 Solicitud por WhatsApp → turno → evolución → historial</h3>
+<ol>
+<li><strong>Visitante:</strong> abre <strong>Ayuda</strong> y elige <strong>Pedir turno por WhatsApp</strong>.</li>
+<li><strong>Visitante:</strong> completa nombre, DNI, especialidad, sede y preferencia.</li>
+<li><strong>Visitante:</strong> pulsa <strong>Abrir WhatsApp con el pedido</strong> y luego <strong>Abrir WhatsApp</strong> para enviar el mensaje.</li>
+<li><strong>Sistema:</strong> guarda la solicitud en estado <strong>Nueva</strong> y crea o vincula la ficha por DNI.</li>
+<li><strong>Recepción:</strong> abre <strong>Solicitudes</strong>, revisa el pedido y contacta al paciente.</li>
+<li><strong>Recepción:</strong> pulsa <strong>Reservar turno</strong>, elige médico, fecha y horario, y confirma.</li>
+<li><strong>Sistema:</strong> crea el turno asociado al DNI y marca la solicitud como <strong>Contactada</strong>.</li>
+<li><strong>Paciente:</strong> si aún no tiene cuenta, se registra con el mismo DNI y reclama su historial.</li>
+<li><strong>Recepción/médico:</strong> confirman el turno y lo marcan <strong>En sala</strong> cuando llega el paciente.</li>
+<li><strong>Médico:</strong> abre el historial y registra la <strong>evolución clínica</strong>.</li>
+<li><strong>Paciente:</strong> ve el turno y la evolución en <strong>Historial clínico</strong>.</li>
+</ol>
+<h3>9.2 Reserva online del paciente</h3>
+<ol>
+<li><strong>Paciente:</strong> ingresa con DNI + contraseña.</li>
+<li><strong>Paciente:</strong> pulsa <strong>Reservar turno</strong>.</li>
+<li><strong>Paciente:</strong> elige especialidad, sede, médico, fecha y horario.</li>
+<li><strong>Paciente:</strong> revisa y confirma los datos.</li>
+<li><strong>Sistema:</strong> crea el turno en estado <strong>Pendiente</strong>.</li>
+<li><strong>Recepción:</strong> confirma el turno desde la agenda.</li>
+<li><strong>Paciente:</strong> lo ve en <strong>Mis turnos</strong>.</li>
+</ol>
+<h3>9.3 Reserva telefónica o presencial</h3>
+<ol>
+<li><strong>Recepción:</strong> ingresa a <strong>Reservar</strong>.</li>
+<li><strong>Recepción:</strong> elige especialidad, sede, médico, fecha y horario.</li>
+<li><strong>Recepción:</strong> carga nombre, DNI, teléfono y notas.</li>
+<li><strong>Recepción:</strong> confirma.</li>
+<li><strong>Sistema:</strong> crea o vincula la ficha por DNI.</li>
+<li><strong>Recepción:</strong> confirma el turno si corresponde.</li>
+</ol>
+<h3>9.4 Reclamo de historial por parte del paciente</h3>
+<ol>
+<li>El paciente tuvo una solicitud o un turno cargado por recepción.</li>
+<li>Entra a <strong>Crear cuenta</strong> con el <strong>mismo DNI</strong>.</li>
+<li>La aplicación detecta la ficha existente.</li>
+<li>Se vinculan automáticamente turnos, solicitudes y evoluciones.</li>
+<li>El paciente ve todo en <strong>Historial clínico</strong>.</li>
+</ol>
+<h3>9.5 Traspaso de responsabilidades</h3>
+<table>
+<thead><tr><th>Etapa</th><th>Responsable</th><th>Resultado</th></tr></thead>
+<tbody>
+<tr><td>Pedido</td><td>Visitante / paciente</td><td>Solicitud <strong>Nueva</strong></td></tr>
+<tr><td>Contacto</td><td>Recepción</td><td>Solicitud <strong>Contactada</strong></td></tr>
+<tr><td>Reserva</td><td>Recepción / paciente</td><td>Turno <strong>Pendiente</strong></td></tr>
+<tr><td>Confirmación</td><td>Recepción</td><td>Turno <strong>Confirmado</strong></td></tr>
+<tr><td>Llegada</td><td>Recepción</td><td>Turno <strong>En sala</strong></td></tr>
+<tr><td>Atención</td><td>Médico</td><td>Turno <strong>Atendido</strong> + evolución</td></tr>
+<tr><td>Consulta</td><td>Paciente</td><td>Historial actualizado</td></tr>
+</tbody>
+</table>
+
+<hr>
+<a id="sec10"></a>
+<h2>10. Uso en móvil y accesibilidad</h2>
+<h3>10.1 Sitio público en móvil</h3>
+<p>El sitio público es responsive. En una pantalla de 390 × 844 px se muestra la portada, los accesos y las especialidades en una columna.</p>
+<figure><img src="manual/img/32-movil-inicio.png" alt="Portada en móvil"><figcaption><strong>Figura 32.</strong> Portada en un teléfono. Los accesos principales se mantienen visibles y las tarjetas se apilan.</figcaption></figure>
+<h3>10.2 Centro de ayuda en móvil</h3>
+<p>El botón <strong>Ayuda</strong> se convierte en un botón circular. Al abrirlo, el panel ocupa el ancho disponible y permite desplazarse por las preguntas frecuentes.</p>
+<figure><img src="manual/img/33-movil-centro-de-ayuda.png" alt="Centro de ayuda en móvil"><figcaption><strong>Figura 33.</strong> Centro de ayuda en móvil. El panel se adapta al ancho de la pantalla y conserva las acciones y los avisos.</figcaption></figure>
+<h3>10.3 Personal en móvil</h3>
+<p>La navegación interna de recepción, médico y administración está pensada para <strong>escritorio o tablet</strong>. En pantallas pequeñas, el menú superior de secciones se oculta; la vista actual sigue funcionando, pero para cambiar de sección se recomienda usar una pantalla más grande.</p>
+<h3>10.4 Accesibilidad y buenas prácticas</h3>
+<ul>
+<li>El panel de ayuda se cierra con <code>Escape</code> y tiene etiquetas ARIA.</li>
+<li>Los formularios usan etiquetas visibles y campos obligatorios.</li>
+<li>Los estados se comunican con texto además de color.</li>
+<li>En móvil, usar el zoom del navegador si hace falta leer tablas o agendas.</li>
+<li>Para personas mayores o con dificultad visual, se recomienda acompañar la reserva desde recepción.</li>
+</ul>
+<hr>
+<a id="sec11"></a>
+<h2>11. Credenciales demo y datos de ejemplo</h2>
+<h3>11.1 Cuentas de demostración</h3>
+<p>La aplicación incluye pestañas de acceso con credenciales precargadas para facilitar la evaluación. Las contraseñas <strong>no se incluyen en este manual</strong> para no exponerlas en un documento versionado. Se encuentran en:</p>
+<ul>
+<li>La pestaña demo de la pantalla <strong>Ingreso al portal</strong> (los campos aparecen completos).</li>
+<li>El archivo local <code>memory/test_credentials.md</code>, que <strong>no se sube al repositorio</strong>.</li>
+</ul>
+<table>
+<thead><tr><th>Perfil</th><th>Identificador</th><th>Tipo de acceso</th><th>2FA</th></tr></thead>
+<tbody>
+<tr><td>Paciente</td><td>DNI <code>35678910</code></td><td>DNI + contraseña</td><td>No</td></tr>
+<tr><td>Recepción</td><td>DNI <code>30111222</code></td><td>DNI + contraseña</td><td>No</td></tr>
+<tr><td>Médico</td><td><code>dr.rossi@clinicabuenasalud.com</code></td><td>Email + contraseña</td><td>Sí</td></tr>
+<tr><td>Administrador</td><td><code>admin@clinicabuenasalud.com</code></td><td>Email + contraseña</td><td>Sí</td></tr>
+</tbody>
+</table>
+
+<blockquote><p><strong>Para el entorno de demostración:</strong> las cuentas de médico y administrador ya tienen 2FA configurado. El código se obtiene desde la aplicación autenticadora asociada al entorno. Los secretos TOTP no se documentan aquí.</p></blockquote>
+<h3>11.2 Datos usados en las capturas</h3>
+<p>Las capturas usan datos ficticios:</p>
+<ul>
+<li>Paciente: <strong>María González Demo</strong>, DNI <code>35678910</code>.</li>
+<li>Médico: <strong>Dr/a. Valentina Rossi</strong>, Cardiología.</li>
+<li>Otras especialidades: Clínica Médica, Oftalmología.</li>
+<li>Sede: <strong>Sede Centro</strong>.</li>
+<li>Fechas: octubre y noviembre de 2026.</li>
+<li>Solicitud de WhatsApp: <strong>María González Demo</strong>, Cardiología, Sede Centro.</li>
+</ul>
+<p>Los turnos, evoluciones y solicitudes de las capturas son datos de demostración y no corresponden a personas reales.</p>
+<h3>11.3 Recomendación para producción</h3>
+<p>Antes de usar la aplicación con pacientes reales:</p>
+<ol>
+<li>Reemplazar las contraseñas demo.</li>
+<li>Configurar 2FA para todas las cuentas de médico y administración.</li>
+<li>Verificar el número de WhatsApp y el teléfono de la clínica.</li>
+<li>Configurar Turnstile para la reserva online.</li>
+<li>Revisar las sedes, especialidades, médicos y horarios cargados.</li>
+<li>Definir quién puede cancelar, reprogramar y cerrar solicitudes.</li>
+</ol>
+<hr>
+<a id="sec12"></a>
+<h2>12. Solución de problemas</h2>
+<h3>12.1 Problemas de acceso</h3>
+<table>
+<thead><tr><th>Problema</th><th>Causa probable</th><th>Solución</th></tr></thead>
+<tbody>
+<tr><td>“DNI o contraseña incorrectos”</td><td>DNI mal escrito, contraseña incorrecta o cuenta inexistente</td><td>Verificar el DNI sin puntos; revisar mayúsculas; probar la contraseña demo si es el entorno de prueba</td></tr>
+<tr><td>“Cuenta bloqueada temporalmente”</td><td>Cinco intentos fallidos</td><td>Esperar 15 minutos o contactar a administración</td></tr>
+<tr><td>“Este DNI ya tiene una solicitud registrada”</td><td>La ficha se creó desde WhatsApp/recepción y no tiene contraseña</td><td>Ir a <strong>Crear cuenta</strong> y usar el mismo DNI</td></tr>
+<tr><td>El ingreso de médico/admin pide 2FA y no se tiene el código</td><td>Cuenta con 2FA activo</td><td>Usar la app autenticadora o un código de recuperación; si se perdió el acceso, contactar a administración</td></tr>
+<tr><td>“Código inválido” en 2FA</td><td>Código vencido, reloj desincronizado o secreto incorrecto</td><td>Esperar el siguiente código; sincronizar la hora del teléfono; revisar que el QR se haya escaneado bien</td></tr>
+</tbody>
+</table>
+
+<h3>12.2 Problemas de turnos</h3>
+<table>
+<thead><tr><th>Problema</th><th>Causa probable</th><th>Solución</th></tr></thead>
+<tbody>
+<tr><td>No aparecen horarios</td><td>No hay agenda para esa fecha, sede o médico</td><td>Probar otra fecha, sede o profesional</td></tr>
+<tr><td>“No hay disponibilidad en esta fecha”</td><td>Todos los horarios están ocupados o bloqueados</td><td>Elegir otra fecha</td></tr>
+<tr><td>“El horario elegido ya no está disponible”</td><td>Otra reserva tomó el horario</td><td>Volver al paso 4 y elegir otro</td></tr>
+<tr><td>“Los turnos requieren al menos 2 horas de anticipación”</td><td>Horario demasiado cercano</td><td>Elegir un horario posterior</td></tr>
+<tr><td>El turno no aparece en <strong>Mis turnos</strong></td><td>Sesión de otro paciente, DNI distinto o turno cancelado</td><td>Verificar el DNI de la cuenta; revisar el estado; consultar a recepción</td></tr>
+<tr><td>El turno quedó asociado a otra persona</td><td>Se cargó un DNI incorrecto</td><td>Contactar a recepción para corregir la ficha; no crear otro turno</td></tr>
+</tbody>
+</table>
+
+<h3>12.3 Problemas con solicitudes de WhatsApp</h3>
+<table>
+<thead><tr><th>Problema</th><th>Causa probable</th><th>Solución</th></tr></thead>
+<tbody>
+<tr><td>La solicitud no aparece en la bandeja</td><td>Filtro activo, solicitud en otro estado o error de red</td><td>Probar <strong>Todas</strong>, pulsar <strong>Actualizar</strong>, revisar la conexión</td></tr>
+<tr><td>El botón <strong>Abrir WhatsApp</strong> no hace nada</td><td>Bloqueador de ventanas emergentes</td><td>Permitir ventanas emergentes o usar <strong>Copiar mensaje</strong></td></tr>
+<tr><td>El mensaje llegó incompleto</td><td>Se editó en WhatsApp o se copió mal</td><td>Volver a generar la solicitud o copiar el mensaje completo</td></tr>
+<tr><td>La solicitud no se guardó, pero se puede enviar</td><td>Falló el registro en el panel</td><td>Enviar el mensaje por WhatsApp y avisar a recepción; la solicitud se puede cargar manualmente</td></tr>
+<tr><td>El paciente no tiene cuenta</td><td>Es normal en solicitudes sin registro</td><td>Recepción reserva con el DNI; el paciente puede crear la cuenta después</td></tr>
+</tbody>
+</table>
+
+<h3>12.4 Problemas de recepción y administración</h3>
+<table>
+<thead><tr><th>Problema</th><th>Causa probable</th><th>Solución</th></tr></thead>
+<tbody>
+<tr><td>No se puede reservar desde una solicitud</td><td>Falta DNI, especialidad o sede; sesión vencida</td><td>Completar los datos faltantes; volver a ingresar</td></tr>
+<tr><td>El turno quedó a nombre de recepción</td><td>Se intentó usar la cuenta del personal como paciente</td><td>El backend ignora ese dato; corregir el DNI y volver a reservar</td></tr>
+<tr><td>No se ve el botón <strong>Historial</strong></td><td>El turno no tiene paciente vinculado</td><td>Verificar que el turno tenga DNI/ficha; cargar la reserva nuevamente si falta</td></tr>
+<tr><td>No se puede agregar una evolución</td><td>El médico no tiene relación con el paciente o falta motivo/diagnóstico/notas</td><td>Verificar que el paciente esté en la agenda del médico; completar al menos un campo clínico</td></tr>
+<tr><td>El dashboard no cambia</td><td>Los datos se cargan al entrar a la vista</td><td>Recargar o volver a entrar</td></tr>
+</tbody>
+</table>
+
+<h3>12.5 Problemas visuales</h3>
+<table>
+<thead><tr><th>Problema</th><th>Causa probable</th><th>Solución</th></tr></thead>
+<tbody>
+<tr><td>El badge de Netlify tapa el botón <strong>Ayuda</strong></td><td>Badge externo en la esquina inferior izquierda y botón de ayuda en la derecha</td><td>La hoja de estilos global ya mueve el badge a la izquierda y lo escala en móvil; si persiste, recargar sin caché</td></tr>
+<tr><td>La página se ve cortada en móvil</td><td>Tabla o agenda ancha</td><td>Usar orientación horizontal o una pantalla más grande; el portal de personal está pensado para escritorio</td></tr>
+<tr><td>El panel de ayuda queda detrás de otro elemento</td><td>Conflicto de z-index</td><td>Recargar; reportar con navegador y tamaño de pantalla</td></tr>
+</tbody>
+</table>
+
+<hr>
+<a id="sec13"></a>
+<h2>13. Seguridad, privacidad y buenas prácticas</h2>
+<h3>13.1 Protección de datos</h3>
+<ul>
+<li>El <strong>DNI</strong> se guarda cifrado con AES-GCM y se indexa con un hash determinístico para evitar duplicados sin exponer el valor.</li>
+<li>El <strong>teléfono</strong> y otros datos sensibles también se cifran.</li>
+<li>Las sesiones se firman con un secreto del servidor.</li>
+<li>Los roles limitan el acceso: un paciente solo ve su historial; un médico solo ve pacientes de su agenda.</li>
+<li>Las solicitudes de WhatsApp tienen límite de frecuencia y un campo honeypot anti-bot.</li>
+<li>La reserva online puede exigir un captcha Turnstile.</li>
+</ul>
+<h3>13.2 Contraseñas y 2FA</h3>
+<ul>
+<li>Usar contraseñas de al menos 10 caracteres con mayúscula, número y símbolo.</li>
+<li>No compartir contraseñas por WhatsApp, email ni chat.</li>
+<li>Activar 2FA en todas las cuentas de médico y administración.</li>
+<li>Guardar los códigos de recuperación en un lugar seguro.</li>
+<li>Cerrar sesión en equipos compartidos.</li>
+</ul>
+<h3>13.3 Manejo de información clínica</h3>
+<ul>
+<li>No enviar diagnósticos, estudios o datos sensibles por el campo de consulta del centro de ayuda.</li>
+<li>El historial clínico es confidencial: consultarlo solo cuando sea necesario para la atención.</li>
+<li>No modificar evoluciones de otros profesionales.</li>
+<li>Si se detecta un error, agregar una nota aclaratoria en lugar de borrar el registro.</li>
+<li>No tomar capturas de pantalla con datos reales sin autorización.</li>
+</ul>
+<h3>13.4 Urgencias</h3>
+<p>El sitio <strong>no es un canal de urgencias</strong>. Ante una emergencia:</p>
+<ul>
+<li>Llamar al <strong>107 (SAME)</strong> o al <strong>911</strong>.</li>
+<li>No esperar la respuesta de una solicitud de WhatsApp.</li>
+<li>No usar el formulario para describir una urgencia.</li>
+</ul>
+<h3>13.5 Recomendaciones para el personal</h3>
+<ul>
+<li>Verificar la identidad del paciente por DNI antes de reservar.</li>
+<li>No reservar turnos a nombre propio ni de otro miembro del personal.</li>
+<li>Confirmar que el teléfono y el email sean del paciente.</li>
+<li>Revisar la bandeja de solicitudes al menos dos veces por turno.</li>
+<li>Marcar las solicitudes como <strong>Contactada</strong> o <strong>Cerrada</strong> para mantener la bandeja limpia.</li>
+<li>Informar a administración si se detecta un acceso extraño o un dato duplicado.</li>
+</ul>
+<hr>
+<a id="sec14"></a>
+<h2>14. Glosario</h2>
+<table>
+<thead><tr><th>Término</th><th>Definición</th></tr></thead>
+<tbody>
+<tr><td><strong>Turno</strong></td><td>Cita entre un paciente y un médico en una fecha, hora y sede determinadas</td></tr>
+<tr><td><strong>Solicitud</strong></td><td>Pedido de turno recibido desde el centro de ayuda, todavía sin reserva confirmada</td></tr>
+<tr><td><strong>Evolución clínica</strong></td><td>Registro de una atención: motivo, diagnóstico, tratamiento y notas</td></tr>
+<tr><td><strong>Historial clínico</strong></td><td>Conjunto de turnos, solicitudes y evoluciones asociados al DNI de un paciente</td></tr>
+<tr><td><strong>DNI</strong></td><td>Documento Nacional de Identidad; identidad principal del paciente</td></tr>
+<tr><td><strong>Sede</strong></td><td>Ubicación física de la clínica (Centro, Norte o Sur)</td></tr>
+<tr><td><strong>Especialidad</strong></td><td>Área médica (Cardiología, Pediatría, etc.)</td></tr>
+<tr><td><strong>2FA</strong></td><td>Doble factor de autenticación mediante un código temporal de 6 dígitos</td></tr>
+<tr><td><strong>TOTP</strong></td><td>Algoritmo de códigos temporales usado por las aplicaciones autenticadoras</td></tr>
+<tr><td><strong>Bandeja</strong></td><td>Pantalla <strong>Solicitudes</strong> donde recepción y administración gestionan los pedidos</td></tr>
+<tr><td><strong>Estado</strong></td><td>Situación actual de un turno o una solicitud</td></tr>
+<tr><td><strong>Seed</strong></td><td>Carga inicial de datos de demostración en la base</td></tr>
+<tr><td><strong>Captcha</strong></td><td>Prueba anti-bot que puede aparecer al reservar</td></tr>
+</tbody>
+</table>
+
+<hr>
+<a id="sec15"></a>
+<h2>15. Anexos</h2>
+<h3>Anexo A. Estados de turnos y solicitudes</h3>
+<p><strong>Turnos</strong></p>
+<table>
+<thead><tr><th>Estado</th><th>Se muestra como</th><th>Uso</th></tr></thead>
+<tbody>
+<tr><td><code>pending</code></td><td>Pendiente</td><td>Turno reservado, esperando confirmación</td></tr>
+<tr><td><code>confirmed</code></td><td>Confirmado</td><td>Turno confirmado por recepción</td></tr>
+<tr><td><code>in_room</code></td><td>En sala</td><td>Paciente presente en la clínica</td></tr>
+<tr><td><code>attended</code></td><td>Atendido</td><td>Atención completada</td></tr>
+<tr><td><code>cancelled</code></td><td>Cancelado</td><td>Turno cancelado</td></tr>
+<tr><td><code>no_show</code></td><td>No asistió</td><td>Paciente ausente</td></tr>
+</tbody>
+</table>
+
+<p><strong>Solicitudes de WhatsApp</strong></p>
+<table>
+<thead><tr><th>Estado</th><th>Se muestra como</th><th>Uso</th></tr></thead>
+<tbody>
+<tr><td><code>new</code></td><td>Nueva</td><td>Pedido recibido sin contactar</td></tr>
+<tr><td><code>contacted</code></td><td>Contactada</td><td>Recepción ya contactó al paciente</td></tr>
+<tr><td><code>closed</code></td><td>Cerrada</td><td>Pedido resuelto o descartado</td></tr>
+</tbody>
+</table>
+
+<h3>Anexo B. Checklist por rol</h3>
+<p><strong>Paciente</strong></p>
+<ul>
+<li class="task"><span class="checkbox">☐</span> Ingresar con DNI y contraseña.</li>
+<li class="task"><span class="checkbox">☐</span> Revisar <strong>Mis turnos</strong>.</li>
+<li class="task"><span class="checkbox">☐</span> Consultar <strong>Historial clínico</strong>.</li>
+<li class="task"><span class="checkbox">☐</span> Reservar un turno nuevo si hace falta.</li>
+<li class="task"><span class="checkbox">☐</span> Contactar a recepción para cancelar o reprogramar.</li>
+</ul>
+<p><strong>Recepción</strong></p>
+<ul>
+<li class="task"><span class="checkbox">☐</span> Revisar la agenda del día.</li>
+<li class="task"><span class="checkbox">☐</span> Confirmar turnos pendientes.</li>
+<li class="task"><span class="checkbox">☐</span> Atender la bandeja de solicitudes.</li>
+<li class="task"><span class="checkbox">☐</span> Reservar desde WhatsApp con el DNI correcto.</li>
+<li class="task"><span class="checkbox">☐</span> Marcar llegadas, atenciones y ausencias.</li>
+<li class="task"><span class="checkbox">☐</span> Cerrar sesión al finalizar.</li>
+</ul>
+<p><strong>Médico</strong></p>
+<ul>
+<li class="task"><span class="checkbox">☐</span> Ingresar con email, contraseña y 2FA.</li>
+<li class="task"><span class="checkbox">☐</span> Revisar <strong>Mi agenda</strong> del día.</li>
+<li class="task"><span class="checkbox">☐</span> Abrir el detalle de cada turno.</li>
+<li class="task"><span class="checkbox">☐</span> Registrar la evolución clínica.</li>
+<li class="task"><span class="checkbox">☐</span> Marcar <strong>Atendido</strong> o <strong>No asistió</strong>.</li>
+<li class="task"><span class="checkbox">☐</span> Cerrar sesión.</li>
+</ul>
+<p><strong>Administración</strong></p>
+<ul>
+<li class="task"><span class="checkbox">☐</span> Revisar <strong>Dashboard</strong>.</li>
+<li class="task"><span class="checkbox">☐</span> Supervisar <strong>Agenda</strong>.</li>
+<li class="task"><span class="checkbox">☐</span> Revisar <strong>Solicitudes</strong>.</li>
+<li class="task"><span class="checkbox">☐</span> Verificar que las cuentas de personal tengan 2FA.</li>
+<li class="task"><span class="checkbox">☐</span> Revisar accesos y datos duplicados.</li>
+</ul>
+<h3>Anexo C. Índice de capturas</h3>
+<table>
+<thead><tr><th>Figura</th><th>Archivo</th><th>Sección</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>01-inicio-portada.png</code></td><td>2.2</td></tr>
+<tr><td>2</td><td><code>02-inicio-completo.png</code></td><td>2.2</td></tr>
+<tr><td>3</td><td><code>03-centro-de-ayuda.png</code></td><td>3.1</td></tr>
+<tr><td>4</td><td><code>04-solicitud-whatsapp-formulario.png</code></td><td>3.4</td></tr>
+<tr><td>5</td><td><code>05-solicitud-whatsapp-registrada.png</code></td><td>3.5</td></tr>
+<tr><td>6</td><td><code>06-login-paciente.png</code></td><td>4.2</td></tr>
+<tr><td>7</td><td><code>07-login-crear-cuenta.png</code></td><td>4.3</td></tr>
+<tr><td>8</td><td><code>08-configurar-2fa.png</code></td><td>4.7</td></tr>
+<tr><td>9</td><td><code>09-verificacion-2fa.png</code></td><td>4.8</td></tr>
+<tr><td>10</td><td><code>10-paciente-mis-turnos.png</code></td><td>5.2</td></tr>
+<tr><td>11</td><td><code>11-paciente-historial.png</code></td><td>5.4</td></tr>
+<tr><td>12</td><td><code>12-reserva-paso-1-especialidad.png</code></td><td>5.5</td></tr>
+<tr><td>13</td><td><code>13-reserva-paso-2-sede.png</code></td><td>5.6</td></tr>
+<tr><td>14</td><td><code>14-reserva-paso-3-medico.png</code></td><td>5.7</td></tr>
+<tr><td>15</td><td><code>15-reserva-paso-4-horario.png</code></td><td>5.8</td></tr>
+<tr><td>16</td><td><code>16-reserva-paso-5-datos.png</code></td><td>5.9</td></tr>
+<tr><td>17</td><td><code>17-reserva-confirmada.png</code></td><td>5.10</td></tr>
+<tr><td>18</td><td><code>18-recepcion-agenda.png</code></td><td>6.2</td></tr>
+<tr><td>19</td><td><code>19-recepcion-turno-detalle.png</code></td><td>6.3</td></tr>
+<tr><td>20</td><td><code>20-recepcion-historial.png</code></td><td>6.4</td></tr>
+<tr><td>21</td><td><code>21-recepcion-solicitudes.png</code></td><td>6.5</td></tr>
+<tr><td>22</td><td><code>22-recepcion-reserva-desde-whatsapp.png</code></td><td>6.6</td></tr>
+<tr><td>23</td><td><code>23-recepcion-reserva-datos.png</code></td><td>6.6</td></tr>
+<tr><td>24</td><td><code>24-recepcion-reserva-confirmada.png</code></td><td>6.6</td></tr>
+<tr><td>25</td><td><code>25-medico-agenda.png</code></td><td>7.2</td></tr>
+<tr><td>26</td><td><code>26-medico-turno-detalle.png</code></td><td>7.3</td></tr>
+<tr><td>27</td><td><code>27-medico-historial.png</code></td><td>7.4</td></tr>
+<tr><td>28</td><td><code>28-medico-nueva-evolucion.png</code></td><td>7.5</td></tr>
+<tr><td>29</td><td><code>29-admin-dashboard.png</code></td><td>8.2</td></tr>
+<tr><td>30</td><td><code>30-admin-agenda.png</code></td><td>8.3</td></tr>
+<tr><td>31</td><td><code>31-admin-solicitudes.png</code></td><td>8.4</td></tr>
+<tr><td>32</td><td><code>32-movil-inicio.png</code></td><td>10.1</td></tr>
+<tr><td>33</td><td><code>33-movil-centro-de-ayuda.png</code></td><td>10.2</td></tr>
+</tbody>
+</table>
+
+<h3>Anexo D. Notas técnicas para soporte</h3>
+<ul>
+<li><strong>Persistencia:</strong> PostgreSQL con documentos <code>jsonb</code>; los identificadores son UUID.</li>
+<li><strong>Identidad:</strong> el paciente se resuelve por DNI; el DNI se cifra y se indexa por hash.</li>
+<li><strong>Reserva:</strong> la API valida disponibilidad, solapamientos y una anticipación mínima de 2 horas.</li>
+<li><strong>Recepción:</strong> el backend ignora <code>patientId</code> cuando quien reserva es personal y exige <code>patientDni</code>; así el turno nunca queda asociado a la cuenta de recepción.</li>
+<li><strong>Solicitudes:</strong> al reservar desde una solicitud, esta pasa a <code>contacted</code> automáticamente.</li>
+<li><strong>2FA:</strong> TOTP de 6 dígitos; los códigos de recuperación se muestran una sola vez.</li>
+<li><strong>Límites:</strong> el ingreso tiene límite de intentos; las solicitudes públicas tienen límite de 5 cada 10 minutos por IP y honeypot.</li>
+<li><strong>Badge de Netlify:</strong> la regla global lo ubica abajo a la izquierda, con menor z-index que el botón <strong>Ayuda</strong> y escala reducida en móvil, para que no se superpongan.</li>
+<li><strong>Capturas:</strong> generadas con Chrome real y Playwright; viven en <code>docs/manual/img/</code>.</li>
+</ul>
+<hr>
+<a id="sec16"></a>
+<h2>16. Control de versiones</h2>
+<table>
+<thead><tr><th>Versión</th><th>Fecha</th><th>Cambios</th></tr></thead>
+<tbody>
+<tr><td>1.0</td><td>28/10/2026</td><td>Manual completo del sitio: público, ayuda, acceso, paciente, recepción, médico, administrador, móvil, solución de problemas y anexos. Incluye 33 capturas reales.</td></tr>
+</tbody>
+</table>
+
+<hr>
+<p><strong>Fin del manual.</strong></p>
+<p>Para consultas sobre este documento, contactar al equipo de administración de Clínica Buena Salud.</p>
+</main>
+</body>
+</html>
