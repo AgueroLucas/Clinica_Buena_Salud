@@ -435,20 +435,31 @@ function LoginView({ onBack, onLogged }) {
   )
 }
 
-function BookingWizard({ user, onDone, initialSpecialtyId = null }) {
-  const [step, setStep] = useState(initialSpecialtyId ? 2 : 1)
+function BookingWizard({ user, onDone, initialSpecialtyId = null, prefill = null }) {
+  // prefill: reserva gestionada por recepción a partir de una solicitud de
+  // WhatsApp. Arranca en el paso más avanzado que permitan los datos cargados.
+  const isPatient = user?.role === 'patient'
+  const [step, setStep] = useState(
+    prefill?.specialtyId && prefill?.branchId ? 3 : (initialSpecialtyId || prefill?.specialtyId) ? 2 : 1,
+  )
   const [specialties, setSpecialties] = useState([])
   const [branches, setBranches] = useState([])
   const [doctors, setDoctors] = useState([])
-  const [specialtyId, setSpecialtyId] = useState(initialSpecialtyId || null)
-  const [branchId, setBranchId] = useState(null)
+  const [specialtyId, setSpecialtyId] = useState(prefill?.specialtyId || initialSpecialtyId || null)
+  const [branchId, setBranchId] = useState(prefill?.branchId || null)
   const [doctor, setDoctor] = useState(null)
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [slots, setSlots] = useState([])
   const [slot, setSlot] = useState(null)
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [form, setForm] = useState({ name: user?.name || '', email: user?.email || '', dni: user?.dni || '', phone: user?.phone || '', notes: '' })
+  const [form, setForm] = useState({
+    name: prefill?.name || (isPatient ? user?.name : '') || '',
+    email: prefill?.email || (isPatient ? user?.email : '') || '',
+    dni: prefill?.dni || (isPatient ? user?.dni : '') || '',
+    phone: prefill?.phone || (isPatient && !String(user?.phone || '').startsWith('enc:v1:') ? user?.phone : '') || '',
+    notes: '',
+  })
   const [captchaToken, setCaptchaToken] = useState(null)
   const [confirmedAppt, setConfirmedAppt] = useState(null)
 
@@ -478,7 +489,9 @@ function BookingWizard({ user, onDone, initialSpecialtyId = null }) {
     setSubmitting(true)
     try {
       const body = {
-        patientId: user?.id || null,
+        // Solo un paciente reserva a su propio nombre. Recepción identifica al
+        // paciente por DNI y el backend resuelve/crea la ficha correspondiente.
+        patientId: isPatient ? user.id : undefined,
         patientName: form.name, patientEmail: form.email || '', patientPhone: form.phone,
         patientDni: form.dni,
         doctorId: doctor.id, specialtyId, branchId,
@@ -487,6 +500,15 @@ function BookingWizard({ user, onDone, initialSpecialtyId = null }) {
       }
       const { appointment } = await api('appointments', { method: 'POST', body: JSON.stringify(body) })
       setConfirmedAppt(appointment)
+      // Si la reserva vino de una solicitud de WhatsApp, la marcamos como
+      // contactada para que recepción no vuelva a gestionarla.
+      if (prefill?.requestId) {
+        try {
+          await api(`whatsapp-requests/${prefill.requestId}`, {
+            method: 'PATCH', body: JSON.stringify({ status: 'contacted' }),
+          })
+        } catch {}
+      }
       toast.success('Turno reservado con éxito')
     } catch (e) { toast.error(e.message) }
     finally { setSubmitting(false) }
@@ -502,7 +524,11 @@ function BookingWizard({ user, onDone, initialSpecialtyId = null }) {
                 <CheckCircle2 className="w-10 h-10 text-gold" />
               </div>
               <h2 className="font-display text-3xl text-navy">¡Turno confirmado!</h2>
-              <p className="text-muted-foreground mt-2">Recibirá el detalle en {confirmedAppt.patientEmail || 'su email'}.</p>
+              <p className="text-muted-foreground mt-2">
+                {prefill?.requestId
+                  ? 'El turno quedó vinculado al DNI del paciente y la solicitud pasó a Contactada.'
+                  : `Recibirá el detalle en ${confirmedAppt.patientEmail || 'su email'}.`}
+              </p>
               <div className="mt-8 grid grid-cols-2 gap-4 text-left">
                 <div className="p-4 rounded-lg bg-muted/40"><div className="text-xs text-muted-foreground">Médico</div><div className="font-medium">{confirmedAppt.doctorName}</div></div>
                 <div className="p-4 rounded-lg bg-muted/40"><div className="text-xs text-muted-foreground">Especialidad</div><div className="font-medium">{confirmedAppt.specialtyName}</div></div>
@@ -512,9 +538,11 @@ function BookingWizard({ user, onDone, initialSpecialtyId = null }) {
               </div>
               <div className="mt-8 flex justify-center gap-3">
                 <Button variant="outline" onClick={onDone}>Finalizar</Button>
-                <Button className="bg-emerald-deep hover:bg-emerald-deep/90" onClick={() => { setConfirmedAppt(null); setStep(1); setDoctor(null); setSlot(null); }}>
-                  Reservar otro turno
-                </Button>
+                {!prefill?.requestId && (
+                  <Button className="bg-emerald-deep hover:bg-emerald-deep/90" onClick={() => { setConfirmedAppt(null); setStep(1); setDoctor(null); setSlot(null); }}>
+                    Reservar otro turno
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -533,6 +561,18 @@ function BookingWizard({ user, onDone, initialSpecialtyId = null }) {
       <div className="mb-8">
         <h1 className="font-display text-3xl md:text-4xl text-navy">Reservar turno</h1>
         <p className="text-muted-foreground">Complete los pasos para reservar su cita</p>
+        {!isPatient && (
+          <div className="mt-4 rounded-xl border border-gold/40 bg-gold/5 px-4 py-3 text-sm">
+            <span className="text-muted-foreground">Paciente:</span>{' '}
+            <span className="font-medium text-navy">{form.name || 'Sin nombre'}</span>
+            <span className="mx-2 text-muted-foreground">•</span>
+            <span className="text-muted-foreground">DNI</span>{' '}
+            <span className="font-medium text-navy">{form.dni || 'Sin DNI'}</span>
+            {prefill?.requestId && (
+              <Badge className="ml-3 border border-amber-200 bg-amber-100 text-amber-800">Desde solicitud de WhatsApp</Badge>
+            )}
+          </div>
+        )}
       </div>
       <div className="flex items-center gap-2 mb-8 overflow-x-auto no-scrollbar">
         {steps.map((s, i) => (
@@ -1067,7 +1107,7 @@ function AdminStats() {
 function AppShell({ user, view, setView, onLogout, children }) {
   const nav = {
     admin:     [['agenda','Agenda'], ['stats','Dashboard'], ['inbox','Solicitudes']],
-    reception: [['agenda','Agenda'], ['inbox','Solicitudes']],
+    reception: [['agenda','Agenda'], ['book','Reservar'], ['inbox','Solicitudes']],
     doctor:    [['doctor','Mi agenda']],
     patient:   [['my','Mis turnos'], ['history','Historial clínico'], ['book','Reservar']],
   }[user.role] || []
@@ -1107,9 +1147,11 @@ function App() {
   const [ready, setReady] = useState(false)
   const [bookSpecialtyId, setBookSpecialtyId] = useState(null)
   const [bookingIntent, setBookingIntent] = useState(false)
+  const [bookingPrefill, setBookingPrefill] = useState(null)
 
   // Reservar requiere cuenta: sin sesión se redirige al login conservando la intención
   function startBooking(specialtyId = null) {
+    setBookingPrefill(null)
     setBookSpecialtyId(specialtyId || null)
     if (user) { setView('book') }
     else { setBookingIntent(true); setView('login') }
@@ -1165,10 +1207,12 @@ function App() {
 
   return (
     <>
-      <AppShell user={user} view={view} setView={k => { if (k === 'book') setBookSpecialtyId(null); setView(k) }} onLogout={logout}>
+      <AppShell user={user} view={view} setView={k => { setBookingPrefill(null); if (k === 'book') setBookSpecialtyId(null); setView(k) }} onLogout={logout}>
         {view === 'agenda' && <AgendaCalendar />}
         {view === 'stats' && <AdminStats />}
-        {view === 'inbox' && <WhatsAppInbox />}
+        {view === 'inbox' && (
+          <WhatsAppInbox onBook={request => { setBookingPrefill(request); setBookSpecialtyId(null); setView('book') }} />
+        )}
         {view === 'doctor' && <DoctorAgenda user={user} />}
         {view === 'my' && <MyAppointments user={user} onBook={() => { setBookSpecialtyId(null); setView('book') }} onHistory={() => setView('history')} />}
         {view === 'history' && (
@@ -1185,10 +1229,16 @@ function App() {
         )}
         {view === 'book' && (
           <BookingWizard
-            key={bookSpecialtyId || 'general'}
+            key={bookingPrefill?.requestId || bookSpecialtyId || 'general'}
             user={user}
             initialSpecialtyId={bookSpecialtyId}
-            onDone={() => { setBookSpecialtyId(null); setView(user.role === 'patient' ? 'my' : 'agenda') }}
+            prefill={bookingPrefill}
+            onDone={() => {
+              const fromRequest = !!bookingPrefill?.requestId
+              setBookingPrefill(null)
+              setBookSpecialtyId(null)
+              setView(fromRequest ? 'inbox' : user.role === 'patient' ? 'my' : 'agenda')
+            }}
           />
         )}
       </AppShell>

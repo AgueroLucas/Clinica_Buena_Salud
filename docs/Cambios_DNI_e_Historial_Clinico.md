@@ -232,7 +232,9 @@ Componente reutilizable con:
 
 1. Inicia sesión con **DNI + contraseña**.
 2. Gestiona la agenda y las solicitudes.
-3. Desde el detalle de un turno o de una solicitud puede abrir el **Historial** del paciente.
+3. Desde **Solicitudes** puede pulsar **Reservar turno** para cargar el turno de ese pedido con los datos del paciente, la especialidad y la sede precargados. Al confirmar, el turno queda vinculado a su DNI y la solicitud pasa a **Contactada**.
+4. También tiene un acceso **Reservar** en el menú para cargar un turno manualmente. El DNI del paciente es obligatorio: la ficha se resuelve por DNI y nunca se asocia a la cuenta del personal.
+5. Desde el detalle de un turno o de una solicitud puede abrir el **Historial** del paciente.
 
 ### 5.4 Médico
 
@@ -322,6 +324,8 @@ Se ejecutaron pruebas reales contra el servidor de desarrollo y la base PostgreS
 | Reserva de turno con DNI | ✅ |
 | El turno aparece en el historial con su DNI | ✅ |
 | Recepción puede consultar el historial | ✅ |
+| Recepción reserva desde una solicitud y el turno queda ligado al DNI | ✅ |
+| Recepción no puede asociar el turno a su propia cuenta | ✅ |
 | `npx next build` | ✅ Compila sin errores |
 
 Los datos de prueba creados durante la verificación fueron eliminados al finalizar.
@@ -338,7 +342,7 @@ npm run dev
 npm run test:dni
 ```
 
-Qué comprueba (60 verificaciones):
+Qué comprueba (63 verificaciones):
 
 - Salud de la API.
 - Login de paciente y recepción con DNI; bloqueo de email para esos roles.
@@ -355,6 +359,7 @@ Qué comprueba (60 verificaciones):
 - Turno visible en el historial y con su DNI.
 - Cancelación propia y bloqueo de cambios de estado no permitidos.
 - Acceso de recepción al historial y a la bandeja.
+- Reserva de recepción usando el DNI del paciente y bloqueo de asociación a la cuenta del personal.
 - Badge de cuenta pendiente/activa antes y después del reclamo.
 - Honeypot y rate limit de solicitudes.
 

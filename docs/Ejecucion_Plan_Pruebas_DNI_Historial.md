@@ -3,7 +3,7 @@
 **Proyecto:** Clínica Buena Salud
 **Fecha de ejecución:** 28/10/2026
 **Responsable:** Agente de desarrollo
-**Estado:** **APROBADO a nivel API y build**. Quedan 8 validaciones manuales de interfaz pendientes.
+**Estado:** **APROBADO a nivel API y build**. La reserva desde recepción se validó en navegador; quedan 8 validaciones manuales de interfaz pendientes.
 **Cambios:** sin commitear al momento de este informe.
 
 ---
@@ -61,15 +61,15 @@ Se validaron los cambios de:
 | B. Autenticación | 10 | 10 | 0 |
 | C. WhatsApp y ficha por DNI | 6 | 6 | 0 |
 | D. Registro y reclamo | 9 | 9 | 0 |
-| E. Turnos y DNI | 12 | 12 | 0 |
+| E. Turnos y DNI | 15 | 15 | 0 |
 | F. Historial y permisos | 12 | 12 | 0 |
 | G. Bandeja de solicitudes | 7 | 7 | 0 |
 | H. Migración y datos | 3 | 3 | 0 |
-| **Total automatizado** | **60** | **60** | **0** |
+| **Total automatizado** | **63** | **63** | **0** |
 | Build de producción | 1 | 1 | 0 |
-| Manual UI | 8 | 0 | 0 (pendientes) |
+| Manual UI | 9 | 1 | 0 (8 pendientes) |
 
-**Resultado automatizado:** `RESUMEN: 60 OK, 0 fallido(s)`.
+**Resultado automatizado:** `RESUMEN: 63 OK, 0 fallido(s)`.
 **Resultado del build:** `✓ Compiled successfully in 4.1s`.
 
 ---
@@ -81,6 +81,7 @@ Se validaron los cambios de:
 | DEF-01 | El backend todavía permitía login con **email** a pacientes y recepción | Medio: contradecía la política de identidad por DNI | `handleLogin` rechaza email para roles `patient` y `reception` | B09, B10 |
 | DEF-02 | La bandeja seguía mostrando **“Cuenta pendiente”** después de que el paciente reclamaba la ficha | Bajo/Medio: información desactualizada para recepción | `handleListWhatsAppRequests` calcula `patientHasAccount` al leer, consultando los usuarios por `$in` | C06, G04 |
 | DEF-03 | El historial mostraba turnos y evoluciones, pero **no las solicitudes de WhatsApp**, aunque la API ya las devolvía | Bajo: historial incompleto respecto a la documentación | Se agregó la sección “Solicitudes de WhatsApp” y el contador `summary.whatsappRequests` | F12 + build |
+| DEF-04 | Al reservar desde recepción, el frontend enviaba el `patientId` del recepcionista y el turno quedaba asociado a la cuenta de recepción | Alto: el turno y su historial apuntaban a la persona equivocada | El asistente solo envía `patientId` cuando el usuario es paciente; el backend ignora `patientId` para el personal y exige DNI, resolviendo la ficha por `dniHash` | E13, E14, E15 + navegador |
 
 No se encontraron fallos en:
 
@@ -156,6 +157,9 @@ No se encontraron fallos en:
 | E08 | El turno conserva el nombre del paciente logueado | ✅ OK |
 | E09 | Recepción reserva para un DNI existente | ✅ OK |
 | E10 | El turno de recepción queda ligado al paciente | ✅ OK |
+| E13 | Recepción no asocia el turno a su propia cuenta | ✅ OK |
+| E14 | El turno conserva al paciente del DNI | ✅ OK |
+| E15 | Recepción no puede reservar sin DNI | ✅ OK |
 | E11 | Paciente cancela su propio turno | ✅ OK |
 | E12 | Paciente no puede marcar su turno como atendido | ✅ OK |
 
@@ -219,13 +223,13 @@ A. Preparación .......................... 1 OK
 B. Autenticación ....................... 10 OK
 C. WhatsApp y ficha por DNI ............ 6 OK
 D. Registro y reclamo .................. 9 OK
-E. Turnos y DNI ........................ 12 OK
+E. Turnos y DNI ........................ 15 OK
 F. Historial y permisos ................ 12 OK
 G. Bandeja de solicitudes .............. 7 OK
 H. Migración y datos ................... 3 OK
 
-Limpieza: 2 usuario(s), 3 turno(s), 7 solicitud(es) y 0 evolución(es) eliminados.
-RESUMEN: 60 OK, 0 fallido(s)
+Limpieza: 2 usuario(s), 4 turno(s), 7 solicitud(es) y 0 evolución(es) eliminados.
+RESUMEN: 63 OK, 0 fallido(s)
 ```
 
 Build:
@@ -239,9 +243,9 @@ Limpieza de datos: la prueba eliminó sus propios usuarios, turnos y solicitudes
 
 ---
 
-## 8. Casos manuales pendientes
+## 8. Casos manuales
 
-Estos casos requieren navegador y no se ejecutaron en esta corrida. El build y los endpoints asociados sí están verificados.
+Estos casos requieren navegador. El build y los endpoints asociados están verificados; M09 se validó con un navegador automatizado (Playwright + Chrome).
 
 | ID | Caso | Pasos | Estado |
 |---|---|---|---|
@@ -253,6 +257,7 @@ Estos casos requieren navegador y no se ejecutaron en esta corrida. El build y l
 | M06 | Historial desde agenda | Recepción/admin abre un turno → **Historial** | ⏳ Pendiente |
 | M07 | Evolución del médico | Médico con 2FA abre un turno → carga una evolución → el paciente la ve | ⏳ Pendiente |
 | M08 | Auditoría | Admin verifica eventos `REGISTER`, `CLAIM_PATIENT_ACCOUNT`, `CREATE_APPOINTMENT` | ⏳ Pendiente |
+| M09 | Reserva desde una solicitud de WhatsApp | Recepción → **Solicitudes** → **Reservar turno** → elegir médico/horario → confirmar. Verificar que el turno queda ligado al DNI del paciente, no a recepción, y que la solicitud pasa a **Contactada** | ✅ Validado |
 
 > M07 es el único caso funcional importante no cubierto por la suite automática, porque requiere completar el alta de 2FA de un médico.
 
@@ -262,7 +267,7 @@ Estos casos requieren navegador y no se ejecutaron en esta corrida. El build y l
 
 1. **Usuarios reales sin DNI:** no podrán iniciar sesión hasta que se les asigne un DNI. Es un riesgo operativo de la migración, no un defecto de código.
 2. **2FA de médicos/admins:** la suite verifica que el login exige 2FA, pero no completa el circuito TOTP ni crea evoluciones con un médico real.
-3. **Validación visual:** no se ejecutó un navegador automatizado; los 8 casos manuales quedan para el visto bueno final.
+3. **Validación visual:** se validó en navegador la reserva desde recepción (M09); los 8 casos restantes quedan para el visto bueno final.
 4. **Rate limit en memoria:** es por proceso. En un despliegue con varias instancias, cada instancia lleva su propio contador (comportamiento preexistente).
 5. **Datos de auditoría:** los tests dejan eventos de auditoría aunque limpian los datos operativos. Si se necesita una base completamente limpia, regenerar el seed.
 6. **Índice único de email:** en bases existentes puede permanecer el índice viejo. PostgreSQL permite múltiples `NULL`, por lo que el email opcional sigue funcionando.
@@ -272,12 +277,12 @@ Estos casos requieren navegador y no se ejecutaron en esta corrida. El build y l
 
 ## 10. Conclusión
 
-- **API e integración:** 60/60 casos aprobados.
+- **API e integración:** 63/63 casos aprobados.
 - **Build de producción:** aprobado.
-- **Defectos detectados:** 3, todos corregidos y re-probados.
-- **Interfaz:** pendiente de validación manual (8 casos).
+- **Defectos detectados:** 4, todos corregidos y re-probados.
+- **Interfaz:** reserva desde recepción validada; quedan 8 casos manuales.
 
-**Recomendación:** los cambios están aptos para revisión y commit. Antes de desplegar a producción, ejecutar los 8 casos manuales, especialmente M03 (historial con solicitudes), M05 (badge de cuenta) y M07 (evolución del médico).
+**Recomendación:** los cambios están aptos para revisión y commit. Antes de desplegar a producción, ejecutar los 8 casos manuales restantes, especialmente M03 (historial con solicitudes), M05 (badge de cuenta) y M07 (evolución del médico).
 
 ---
 

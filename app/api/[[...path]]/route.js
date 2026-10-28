@@ -652,6 +652,14 @@ async function handleCreateAppointment(req) {
 
   const db = await getDb()
 
+  // Recepción y admin reservan identificando al paciente por DNI. Ignoramos
+  // cualquier patientId enviado para que el turno no pueda quedar asociado a
+  // la cuenta de un usuario interno.
+  if (user.role !== 'patient') {
+    if (!body.patientDni) return err('El DNI del paciente es obligatorio para reservar desde recepción', 400)
+    body.patientId = null
+  }
+
   // Un paciente solo puede reservar turnos a su propio nombre (evita suplantación)
   if (user.role === 'patient') {
     body.patientId = user.id

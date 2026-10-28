@@ -144,7 +144,7 @@ Para apuntar a otro puerto:
 $env:TEST_BASE_URL='http://localhost:3010'; npm run test:dni
 ```
 
-El informe completo de la ultima ejecucion (60 casos automatizados) esta en `docs/Ejecucion_Plan_Pruebas_DNI_Historial.md`.
+El informe completo de la ultima ejecucion (63 casos automatizados) esta en `docs/Ejecucion_Plan_Pruebas_DNI_Historial.md`.
 
 ## Centro de ayuda y solicitudes de turno
 
@@ -152,6 +152,7 @@ En la esquina inferior derecha de la pagina publica hay un boton **Ayuda**. Abre
 
 - **Reservar turno online**: lleva al registro/login existente (la reserva online sigue requiriendo cuenta).
 - **Solicitar turno sin cuenta**: formulario corto (nombre, **DNI**, telefono, especialidad, sede y preferencia). El pedido se guarda en `whatsapp_requests`, crea/vincula la ficha del paciente por DNI y aparece en **Solicitudes** para admin y recepcion. Luego el paciente puede crear su cuenta con ese mismo DNI para acceder a su historial.
+- Recepcion puede reservar el turno directamente desde cada solicitud con **Reservar turno**: abre el asistente con el paciente, la especialidad y la sede precargados. Al confirmar, el turno se vincula al DNI y la solicitud pasa a **Contactada**. Tambien hay un acceso **Reservar** en el menu para cargar un turno manualmente.
 - **Escribir por WhatsApp**: abre `wa.me` con un mensaje precargado. El visitante debe pulsar *Enviar* en WhatsApp; no se envia automaticamente.
 - **Llamar a la clinica**: abre el marcador del telefono.
 - **Preguntas frecuentes**: turnos, sedes, cancelaciones, coberturas y urgencias.

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import {
-  CheckCheck, ClipboardList, Clock3, CreditCard, Inbox, Loader2, MapPin, MessageCircle, Phone, RefreshCw, Stethoscope, XCircle,
+  CalendarPlus, CheckCheck, ClipboardList, Clock3, CreditCard, Inbox, Loader2, MapPin, MessageCircle, Phone, RefreshCw, Stethoscope, XCircle,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -49,7 +49,7 @@ function replyText(item) {
   return `Hola ${item.name}, somos de Clínica Buena Salud. Recibimos tu solicitud de turno${specialty}. ¿Qué día y horario te quedan cómodos?`
 }
 
-export function WhatsAppInbox() {
+export function WhatsAppInbox({ onBook }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
@@ -186,6 +186,22 @@ export function WhatsAppInbox() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
+                    {onBook && (
+                      <Button
+                        size="sm"
+                        className="bg-gold text-navy hover:bg-gold/90"
+                        onClick={() => onBook({
+                          requestId: item.id,
+                          name: item.patientName || item.name,
+                          dni: item.dni,
+                          phone: item.phone,
+                          specialtyId: item.specialtyId || '',
+                          branchId: item.branchId || '',
+                        })}
+                      >
+                        <CalendarPlus className="h-3.5 w-3.5" /> Reservar turno
+                      </Button>
+                    )}
                     {item.patientId && (
                       <Button size="sm" variant="outline" onClick={() => setHistoryFor(item)}>
                         <ClipboardList className="h-3.5 w-3.5" /> Historial

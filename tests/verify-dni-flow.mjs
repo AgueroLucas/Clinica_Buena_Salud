@@ -325,6 +325,31 @@ try {
     } else {
       fail('E09', 'Recepción reserva para un DNI existente', 'sin horarios disponibles')
     }
+
+    // El personal no debe poder asociar el turno a su propia cuenta enviando
+    // su patientId: la identidad del paciente se resuelve por DNI.
+    const slot4 = await findSlot(doctorRow.id)
+    if (slot4) {
+      const res = await api('/appointments', { method: 'POST', token: reception.json.token, body: {
+        doctorId: doctorRow.id, branchId: slot4.branchId || doctorRow.branchIds[0],
+        date: slot4.date, startTime: slot4.startTime, endTime: slot4.endTime,
+        patientId: reception.json.user.id,
+        patientDni: state.dni, patientName: state.name, patientPhone: '+54 9 11 5555-0000',
+      } })
+      check('E13', 'Recepción no asocia el turno a su propia cuenta', res.json.appointment?.patientId === state.patientId, res.json.appointment)
+      check('E14', 'El turno conserva al paciente del DNI', res.json.appointment?.patientName === state.name, res.json.appointment)
+
+      const noDni = await api('/appointments', { method: 'POST', token: reception.json.token, body: {
+        doctorId: doctorRow.id, branchId: slot4.branchId || doctorRow.branchIds[0],
+        date: slot4.date, startTime: slot4.startTime, endTime: slot4.endTime,
+        patientName: 'Sin DNI',
+      } })
+      check('E15', 'Recepción no puede reservar sin DNI', noDni.status === 400, noDni.json)
+    } else {
+      fail('E13', 'Recepción no asocia el turno a su propia cuenta', 'sin horarios disponibles')
+      fail('E14', 'El turno conserva al paciente del DNI', 'sin horarios disponibles')
+      fail('E15', 'Recepción no puede reservar sin DNI', 'sin horarios disponibles')
+    }
   }
 
   if (appointment2) {
