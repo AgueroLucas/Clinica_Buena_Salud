@@ -37,15 +37,6 @@ const WA_STATUS = {
 
 const EMPTY_RECORD = { date: '', reason: '', diagnosis: '', treatment: '', notes: '' }
 
-function Summary({ label, value }) {
-  return (
-    <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
-      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
-      <div className="mt-0.5 font-display text-2xl text-navy">{value}</div>
-    </div>
-  )
-}
-
 export function ClinicalHistory({ patientId, canAdd = false, appointmentId = null, onChanged }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -142,14 +133,6 @@ export function ClinicalHistory({ patientId, canAdd = false, appointmentId = nul
           </Badge>
         </CardContent>
       </Card>
-
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        <Summary label="Turnos totales" value={summary.totalAppointments ?? 0} />
-        <Summary label="Atendidos" value={summary.attended ?? 0} />
-        <Summary label="Próximos" value={summary.upcoming ?? 0} />
-        <Summary label="Evoluciones" value={summary.clinicalRecords ?? 0} />
-        <Summary label="Solicitudes" value={summary.whatsappRequests ?? 0} />
-      </div>
 
       {canAdd && (
         <Card className="border-emerald-200/70">
